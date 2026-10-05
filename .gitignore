@@ -1,0 +1,14 @@
+dist/
+*.user
+*.log
+settings.json
+*.key
+.env*
+artifacts/
+*.lnk
+backups/
+releases/
+voice-samples/
+*.wav
+*.tmp
+build-desktop-check.ps1

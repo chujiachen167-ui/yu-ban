@@ -1,0 +1,67 @@
+using System;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Automation;
+using System.Threading;
+using System.Threading.Tasks;
+namespace EnglishCompanion {
+    internal sealed class SpeechOptionsWindow {
+        readonly Window window;
+        readonly Configuration config;
+        readonly ComboBox style=new ComboBox(), voice=new ComboBox();
+        readonly TextBlock status=new TextBlock();
+        readonly Button listen=new Button(),apply=new Button();
+        readonly AudioActivity activity=new AudioActivity {Visibility=Visibility.Collapsed,Margin=new Thickness(0,0,6,0)};
+        readonly TextBlock listenLabel=new TextBlock {Text="试听",VerticalAlignment=VerticalAlignment.Center};
+        readonly VoiceProcess player=new VoiceProcess();
+        CancellationTokenSource job;
+        bool closed;
+        internal SpeechOptionsWindow(Window owner,Configuration source) {
+            config=Probe.Json.Deserialize<Configuration>(Probe.Json.Serialize(source));
+            var skin=Skin.Get(source.Theme);
+            window=new Window {Title="语伴 · 朗读偏好",Owner=owner,Width=540,Height=400,ResizeMode=ResizeMode.NoResize,WindowStartupLocation=WindowStartupLocation.CenterOwner,FontFamily=owner.FontFamily,FontSize=14,Foreground=Skin.Brush(skin.Ink),Background=Skin.Brush(skin.Surface),ShowInTaskbar=false};
+            window.Resources=owner.Resources;
+            var layout=new Grid {Margin=new Thickness(26)};
+            foreach(double h in new[]{44.0,80,100,38,48})layout.RowDefinitions.Add(new RowDefinition {Height=new GridLength(h)});
+            layout.Children.Add(new TextBlock {Text="朗读偏好",FontSize=23,FontWeight=FontWeights.SemiBold});
+            var controls=new Grid();controls.ColumnDefinitions.Add(new ColumnDefinition());controls.ColumnDefinitions.Add(new ColumnDefinition {Width=new GridLength(16)});controls.ColumnDefinitions.Add(new ColumnDefinition());Grid.SetRow(controls,1);layout.Children.Add(controls);
+            var styles=new StackPanel();styles.Children.Add(new TextBlock {Text="读法",Margin=new Thickness(0,0,0,6)});styles.Children.Add(style);controls.Children.Add(styles);
+            var voices=new StackPanel();voices.Children.Add(new TextBlock {Text="英语音色",Margin=new Thickness(0,0,0,6)});voices.Children.Add(voice);Grid.SetColumn(voices,2);controls.Children.Add(voices);
+            style.Height=voice.Height=40;AutomationProperties.SetName(style,"朗读方式");AutomationProperties.SetName(voice,"英语音色");
+            foreach(string name in SpeechProfiles.StyleNames)style.Items.Add(name);
+            foreach(string name in SpeechProfiles.VoiceNames)voice.Items.Add(name);
+            style.SelectedIndex=Math.Max(0,Array.IndexOf(SpeechProfiles.StyleIds,config.SpeechStyle));voice.SelectedIndex=Math.Max(0,Array.IndexOf(SpeechProfiles.VoiceIds,config.EnglishVoice));
+            var sample=new TextBlock {Text=SpeechProfiles.Sample,FontFamily=new System.Windows.Media.FontFamily("Segoe UI"),FontSize=16,TextWrapping=TextWrapping.Wrap,VerticalAlignment=VerticalAlignment.Center};Grid.SetRow(sample,2);layout.Children.Add(sample);
+            status.FontSize=12;status.Foreground=Skin.Brush(skin.Muted);status.TextWrapping=TextWrapping.Wrap;status.VerticalAlignment=VerticalAlignment.Center;Grid.SetRow(status,3);layout.Children.Add(status);
+            var actions=new Grid();actions.ColumnDefinitions.Add(new ColumnDefinition());actions.ColumnDefinitions.Add(new ColumnDefinition());Grid.SetRow(actions,4);layout.Children.Add(actions);
+            var listenContent=new StackPanel {Orientation=Orientation.Horizontal};listenContent.Children.Add(activity);listenContent.Children.Add(listenLabel);listen.Content=listenContent;listen.Width=100;listen.Height=40;listen.HorizontalAlignment=HorizontalAlignment.Left;listen.BorderThickness=new Thickness(1);listen.Background=Skin.Brush(skin.Hover);actions.Children.Add(listen);
+            apply.Content="采用";apply.Width=100;apply.Height=40;apply.HorizontalAlignment=HorizontalAlignment.Right;apply.Background=Skin.Brush(skin.Accent);apply.Foreground=Skin.Brush(skin.ButtonInk);Grid.SetColumn(apply,1);actions.Children.Add(apply);
+            style.SelectionChanged+=delegate {Stop();Refresh();};voice.SelectionChanged+=delegate {Stop();Refresh();};
+            listen.Click+=async delegate {await Listen();};
+            apply.Click+=delegate {ReadSelection();source.SpeechStyle=config.SpeechStyle;source.EnglishVoice=config.EnglishVoice;window.DialogResult=true;};
+            window.Closed+=delegate {closed=true;Stop();};window.Content=layout;Refresh();
+        }
+        void ReadSelection() {config.SpeechStyle=SpeechProfiles.StyleIds[Math.Max(0,style.SelectedIndex)];config.EnglishVoice=SpeechProfiles.VoiceIds[Math.Max(0,voice.SelectedIndex)];}
+        void Refresh() {ReadSelection();bool supported=SpeechProfiles.Supported(config);listen.IsEnabled=apply.IsEnabled=supported;status.Text=supported?(System.IO.File.Exists(SpeechProfiles.SamplePath(config))?"已有试听，可直接播放":"首次试听使用语音额度；再次播放不重复生成"):"当前试听适用于千问 Audio 3.1 的英语朗读";}
+        Task Listen() {
+            var previous=SynchronizationContext.Current;
+            try {SynchronizationContext.SetSynchronizationContext(new System.Windows.Threading.DispatcherSynchronizationContext(window.Dispatcher));return ListenCore();}
+            finally {SynchronizationContext.SetSynchronizationContext(previous);}
+        }
+        async Task ListenCore() {
+            if(job!=null){Stop();Refresh();return;}
+            ReadSelection();var current=new CancellationTokenSource();job=current;SetPlayback(PlaybackState.Preparing);apply.IsEnabled=false;status.Text="正在准备试听…";
+            try {
+                var bytes=await SpeechProfiles.Preview(config,current.Token);current.Token.ThrowIfCancellationRequested();
+                if(closed||job!=current)return;status.Text="正在播放";SetPlayback(PlaybackState.Playing);
+                await player.Play(new VoiceRequest {Audio=Convert.ToBase64String(bytes)},current.Token);
+                if(!closed&&job==current)status.Text="试听结束";
+            } catch(OperationCanceledException) { }
+            catch(Exception e) {if(!closed&&job==current)status.Text=e is InvalidOperationException?e.Message:"试听暂不可用，请重试";}
+            finally {if(job==current){job=null;SetPlayback(PlaybackState.Idle);apply.IsEnabled=SpeechProfiles.Supported(config);}current.Dispose();}
+        }
+        void SetPlayback(PlaybackState state) {activity.State=state;activity.Visibility=state==PlaybackState.Idle?Visibility.Collapsed:Visibility.Visible;listenLabel.Text=state==PlaybackState.Idle?"试听":state==PlaybackState.Preparing?"准备中":"停止";AutomationProperties.SetName(listen,state==PlaybackState.Idle?"试听":state==PlaybackState.Preparing?"取消试听":"停止试听");}
+        void Stop() {var current=job;job=null;if(current!=null)current.Cancel();player.Dispose();SetPlayback(PlaybackState.Idle);}
+        internal void Show() {window.ShowDialog();}
+    }
+}
