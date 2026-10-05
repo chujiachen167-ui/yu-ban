@@ -51,7 +51,7 @@ namespace EnglishCompanion {
             Find<RadioButton>("TranslationOnly").Checked+=delegate {draft.ShowOriginal=false;};
             Find<Grid>("TitleBar").MouseLeftButtonDown+=delegate(object sender,MouseButtonEventArgs e) { if(e.OriginalSource==sender) window.DragMove(); };
             ProviderHelp.Attach(Find<Button>("TranslationInfo"),delegate {return currentTranslation;},false,delegate {new ProviderOptionsWindow(window,draft,currentTranslation,false).Show();});
-            ProviderHelp.Attach(Find<Button>("SpeechInfo"),delegate {return currentSpeech;},true,delegate {new ProviderOptionsWindow(window,draft,currentSpeech,true).Show();Refresh();});
+            ProviderHelp.Attach(Find<Button>("SpeechInfo"),delegate {return currentSpeech;},true,delegate {if(currentSpeech=="千问")new QwenSpeechOptionsWindow(window,draft,speechKey.Value).Show();else new ProviderOptionsWindow(window,draft,currentSpeech,true).Show();Refresh();},delegate {return currentSpeech=="系统语音"?null:ProviderProfiles.Profile(draft,currentSpeech,true);},delegate {return speechKey.Value;});
             Find<Button>("SpeechOptions").Click+=delegate {
                 var voiceDraft=Probe.Json.Deserialize<Configuration>(Probe.Json.Serialize(draft));
                 ProviderProfiles.Prepare(voiceDraft,currentSpeech,true);
@@ -132,7 +132,17 @@ namespace EnglishCompanion {
             SetFeedback("SpeechState",speechKey.Value,ProviderProfiles.Saved(savedSpeech,currentSpeech),currentSpeech=="系统语音");
         }
         void Save() {
-            try { ProviderProfiles.Apply(draft,currentTranslation,translationKey.Value,currentSpeech,speechKey.Value); if(!preview) draft.Save(); Result=draft; accepted=true; window.Close(); }
+            try {
+                if(currentSpeech=="千问"&&!String.IsNullOrWhiteSpace(speechKey.Value)) {
+                    var profile=ProviderProfiles.Profile(draft,currentSpeech,true);
+                    if(QwenWorkspace.Required(profile,speechKey.Value)&&!QwenWorkspace.Ready(profile)&&!new QwenSpeechOptionsWindow(window,draft,speechKey.Value).Show()) {
+                        status.Text="语音配置尚未完成，已填写内容仍保留。";status.Visibility=Visibility.Visible;return;
+                    }
+                    var selected=ProviderProfiles.Profile(draft,currentSpeech,true);
+                    Services.ValidateSpeech(new Configuration {SpeechUrl=selected.Url,SpeechModel=selected.Model},speechKey.Value.Trim());
+                }
+                ProviderProfiles.Apply(draft,currentTranslation,translationKey.Value,currentSpeech,speechKey.Value); if(!preview) draft.Save(); Result=draft; accepted=true; window.Close();
+            }
             catch(InvalidOperationException e) {status.Text=e.Message;status.Visibility=Visibility.Visible;}
             catch { status.Text="保存失败，请重试；当前填写内容仍保留。"; status.Visibility=Visibility.Visible; }
         }

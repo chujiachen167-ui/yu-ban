@@ -14,6 +14,7 @@ namespace EnglishCompanion {
         static HttpResponseMessage JsonResponse(string json){return new HttpResponseMessage(HttpStatusCode.OK){Content=new StringContent(json,Encoding.UTF8,"application/json")};}
         static Dictionary<string,object> RequestBody(HttpRequestMessage request){return (Dictionary<string,object>)Probe.Json.DeserializeObject(request.Content.ReadAsStringAsync().GetAwaiter().GetResult());}
         static void ProviderContractChecks() {
+            QwenWorkspaceChecks();
             const string key="contract-test-credential";const string input="今天要下雨。";
             Equal(9,ProviderProfiles.Translation.Length,"translation provider count");Equal(5,ProviderProfiles.Speech.Length,"cloud voice provider count");
             try {

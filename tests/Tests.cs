@@ -215,6 +215,8 @@ namespace EnglishCompanion {
         }
         [STAThread] internal static int Main(string[] args) {
             try {
+                if(Array.IndexOf(args,"--saved-settings-check")>=0){SavedSettingsUiChecks();Console.WriteLine("PASS: "+count+" saved settings assertions; credentials not printed; no network");return 0;}
+                if(Array.IndexOf(args,"--qwen-ui-check")>=0){QwenSetupUiChecks();Console.WriteLine("PASS: "+count+" workspace dialog assertions; no network");return 0;}
                 if(Array.IndexOf(args,"--speech-ui-check")>=0) {
                     using(var settings=new SettingsWindow(new Configuration(),true)) {
                         var owner=Field<System.Windows.Window>(settings,"window");owner.Show();PumpLayout();

@@ -30,7 +30,11 @@
 
 设置页选平台并填写 Key。点击 i 信息弹窗中的“模型与接口”，可改完整接口地址、模型和音色。确认此小窗口仅修改设置草稿，还需要回到主设置点“确认”才保存到本机。取消主设置不会写入。
 
-千问普通百炼 Key 使用默认 Qwen3-TTS-Flash。工作空间 Key 使用该工作空间专属 HTTPS 地址、准确的 Audio 型号与对应音色；更换平台后再切回来保留原设置。国际地域地址也必须和 Key 的地域匹配。
+千问普通百炼 Key 使用默认 Qwen3-TTS-Flash。Qwen Audio / 工作空间 Key：点语音配置旁的 i → 配置千问语音，填写工作空间 ID，语伴自动生成接口地址，模型和音色可按需展开调整。已有工作空间会预填；更换平台后再切回来保留原设置。地域必须和 Key 一致，模型能否调用以平台权限为准。
+
+找 ID：打开百炼控制台，选择 Key 所属地域，在右上角的业务空间信息里复制 Workspace ID。管理员也可在业务空间管理页面的 ID 列复制。它不是 API Key，也不是 APP ID。详见 [官方获取指引](https://help.aliyun.com/zh/model-studio/obtain-the-app-id-and-workspace-id) 和 [Audio 接口说明](https://help.aliyun.com/zh/model-studio/non-realtime-tts-user-guide)。
+
+语伴配置保存在当前 Windows 用户的 `%LOCALAPPDATA%\EnglishCompanion\settings.json`，不随解压或源码目录移动。i 中的配置弹窗只改当前草稿；主设置页确认后才写入本机。取消时已填 Key 保留在主窗口。
 
 Gemini 的接口地址填到 `/v1beta/models/`，程序附加模型和 `:generateContent`；ElevenLabs 地址填到 `/v1/text-to-speech/`，程序附加音色 ID 并请求 PCM 24000。不要在地址中放 Key 或查询参数。MiniMax 国内平台使用 api.minimax.cn，国际账户可改为 api.minimax.io；不能混用不同区域的 Key。
 

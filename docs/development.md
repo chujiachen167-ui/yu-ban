@@ -41,4 +41,6 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1 -Test
 
 ## 版本与日志
 
-公开首版 1.0.0，当前版本 1.0.1。Windows 文件版本写为 1.0.1.0，显示版本写为 1.0.1。开发更新日志放在 changelog，应用设置页不提供日志入口。
+公开首版 1.0.0，当前版本 1.0.2。Windows 文件版本写为 1.0.2.0，显示版本写为 1.0.2。开发更新日志放在 changelog，应用设置页不提供日志入口。
+
+`--qwen-ui-check` 用假 Key 验证工作空间填写、取消及自动接续主设置保存，不调用网络。`--saved-settings-check` 是本机只读诊断，需要本机已有两把 Key 和完整千问工作空间；检查输入控件实际加载，不打印凭据、不修改配置，不适合默认 CI。

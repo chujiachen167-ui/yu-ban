@@ -8,7 +8,7 @@
 
 ## 下载与开始
 
-1. 在 [Releases](https://github.com/chujiachen167-ui/yu-ban/releases) 下载 `yu-ban-1.0.1-windows-x64.zip`，解压整个文件夹。
+1. 在 [Releases](https://github.com/chujiachen167-ui/yu-ban/releases) 下载 `yu-ban-1.0.2-windows-x64.zip`，解压整个文件夹。
 2. 双击 `EnglishCompanion.exe`。翻译默认选 DeepSeek，语音默认选千问，分别填入自己的 API Key。
 3. 点“确认”，回到输入框，照常输入。
 

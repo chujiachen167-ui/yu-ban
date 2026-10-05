@@ -73,7 +73,7 @@ namespace EnglishCompanion {
             var endpoint = Endpoint(c.SpeechUrl);
             if ((key.StartsWith("sk-ws-", StringComparison.Ordinal) || c.SpeechModel.StartsWith("qwen-audio-", StringComparison.OrdinalIgnoreCase)) &&
                 (!endpoint.Host.EndsWith(".cn-beijing.maas.aliyuncs.com", StringComparison.OrdinalIgnoreCase) && !endpoint.Host.EndsWith(".ap-southeast-1.maas.aliyuncs.com", StringComparison.OrdinalIgnoreCase)))
-                throw new InvalidOperationException("此千问语音配置需要工作空间专属地址，请先补全工作空间配置");
+                throw new InvalidOperationException("千问语音还缺工作空间配置。打开设置，点语音配置旁的 i → 配置千问语音，填入工作空间 ID 即可。");
         }
         internal static async Task<string> Translate(Configuration c, string text, CancellationToken token) {
             if (String.IsNullOrWhiteSpace(text) || text.Length > 1800) throw new InvalidOperationException("一次请翻译 1–1800 字");
