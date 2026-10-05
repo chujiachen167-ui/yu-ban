@@ -6,6 +6,21 @@
   <Style TargetType="ComboBox"><Setter Property="Height" Value="52"/><Setter Property="Foreground" Value="{DynamicResource Ink}"/><Setter Property="Background" Value="{DynamicResource Field}"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ComboBox"><Grid><ToggleButton Focusable="False" IsChecked="{Binding IsDropDownOpen,RelativeSource={RelativeSource TemplatedParent},Mode=TwoWay}" ClickMode="Press"><ToggleButton.Template><ControlTemplate TargetType="ToggleButton"><Border x:Name="Base" CornerRadius="13" Background="{DynamicResource Field}" BorderBrush="{DynamicResource FieldEdge}" BorderThickness="1"><Path Data="M 0 0 L 4 4 L 8 0" Stroke="{DynamicResource Muted}" StrokeThickness="1.5" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,16,0"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Base" Property="BorderBrush" Value="{DynamicResource Focus}"/></Trigger></ControlTemplate.Triggers></ControlTemplate></ToggleButton.Template></ToggleButton><ContentPresenter IsHitTestVisible="False" Content="{TemplateBinding SelectionBoxItem}" VerticalAlignment="Center" Margin="16,0,36,0"/><Popup x:Name="PART_Popup" Placement="Bottom" AllowsTransparency="True" IsOpen="{TemplateBinding IsDropDownOpen}" Focusable="False"><Border Background="{DynamicResource MenuSurface}" BorderBrush="{DynamicResource Edge}" BorderThickness="1" CornerRadius="12" Padding="6" MinWidth="158" Margin="0,5,0,0"><ScrollViewer MaxHeight="280" VerticalScrollBarVisibility="Auto"><ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/></ScrollViewer></Border></Popup></Grid></ControlTemplate></Setter.Value></Setter></Style>
   <Style TargetType="ComboBoxItem"><Setter Property="Foreground" Value="{DynamicResource Ink}"/><Setter Property="Padding" Value="12,9"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ComboBoxItem"><Border x:Name="Choice" Background="Transparent" CornerRadius="7" Padding="{TemplateBinding Padding}"><ContentPresenter/></Border><ControlTemplate.Triggers><Trigger Property="IsHighlighted" Value="True"><Setter TargetName="Choice" Property="Background" Value="{DynamicResource Hover}"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>
   <Style x:Key="Info" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Setter Property="Width" Value="26"/><Setter Property="Height" Value="26"/><Setter Property="Margin" Value="8,0,0,0"/><Setter Property="ContentTemplate"><Setter.Value><DataTemplate><Border Width="18" Height="18" CornerRadius="9" BorderBrush="{DynamicResource Muted}" BorderThickness="1"><TextBlock Text="i" FontFamily="Segoe UI" FontStyle="Normal" FontWeight="SemiBold" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border></DataTemplate></Setter.Value></Setter></Style>
+  <Style x:Key="SpeechPreference" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+   <Setter Property="Height" Value="34"/><Setter Property="Padding" Value="12,0"/><Setter Property="Margin" Value="12,0,0,0"/><Setter Property="FontSize" Value="14"/><Setter Property="FontWeight" Value="SemiBold"/>
+   <Setter Property="Background" Value="{DynamicResource Hover}"/><Setter Property="BorderBrush" Value="{DynamicResource Edge}"/>
+   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
+    <Border x:Name="PreferenceSurface" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="10" Padding="{TemplateBinding Padding}">
+     <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+    </Border>
+    <ControlTemplate.Triggers>
+     <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="PreferenceSurface" Property="BorderBrush" Value="{DynamicResource Focus}"/></Trigger>
+     <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="PreferenceSurface" Property="BorderBrush" Value="{DynamicResource Accent}"/></Trigger>
+     <Trigger Property="IsPressed" Value="True"><Setter TargetName="PreferenceSurface" Property="Opacity" Value="0.78"/></Trigger>
+     <Trigger Property="IsEnabled" Value="False"><Setter TargetName="PreferenceSurface" Property="Opacity" Value="0.4"/></Trigger>
+    </ControlTemplate.Triggers>
+   </ControlTemplate></Setter.Value></Setter>
+  </Style>
  </Window.Resources>
  <Border x:Name="Shell" CornerRadius="24" BorderBrush="{DynamicResource Edge}" BorderThickness="1" ClipToBounds="True">
   <Grid>
@@ -30,7 +45,11 @@
      </StackPanel>
     </Border>
     <Border x:Name="SpeechCard" CornerRadius="20" BorderBrush="{DynamicResource Edge}" BorderThickness="1" Padding="20,15,20,17" Margin="0,14,0,0">
-     <StackPanel><DockPanel Margin="0,0,0,12"><TextBlock x:Name="SpeechState" DockPanel.Dock="Right" Foreground="#2965B5" FontSize="12" VerticalAlignment="Center"/><StackPanel Orientation="Horizontal"><TextBlock Text="语音模型配置" FontSize="17" FontWeight="SemiBold" VerticalAlignment="Center"/><Button x:Name="SpeechInfo" Style="{StaticResource Info}" AutomationProperties.Name="语音模型配置说明"/><Button x:Name="SpeechOptions" Content="朗读偏好" FontSize="12" Padding="8,4" Margin="6,0,0,0" AutomationProperties.Name="朗读偏好"/></StackPanel></DockPanel>
+     <StackPanel><DockPanel Margin="0,0,0,12"><TextBlock x:Name="SpeechState" DockPanel.Dock="Right" Foreground="#2965B5" FontSize="12" VerticalAlignment="Center"/><StackPanel Orientation="Horizontal"><TextBlock Text="语音模型配置" FontSize="17" FontWeight="SemiBold" VerticalAlignment="Center"/><Button x:Name="SpeechInfo" Style="{StaticResource Info}" AutomationProperties.Name="语音模型配置说明"/>
+      <Button x:Name="SpeechOptions" Style="{StaticResource SpeechPreference}" AutomationProperties.Name="朗读偏好" ToolTip="朗读方式与音色">
+       <StackPanel Orientation="Horizontal"><Path Width="16" Height="16" Margin="0,0,7,0" Data="M 2,6 L 2,10 M 6,3 L 6,13 M 10,1 L 10,15 M 14,5 L 14,11" Stroke="{DynamicResource Ink}" StrokeThickness="1.7" StrokeStartLineCap="Round" StrokeEndLineCap="Round" VerticalAlignment="Center"/><TextBlock Text="朗读偏好" VerticalAlignment="Center"/></StackPanel>
+      </Button>
+     </StackPanel></DockPanel>
       <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="190"/><ColumnDefinition Width="14"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><ComboBox x:Name="SpeechProvider" FontSize="16" AutomationProperties.Name="语音服务商"/><Grid x:Name="SpeechKeyHost" Grid.Column="2"/></Grid>
      </StackPanel>
     </Border>

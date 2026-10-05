@@ -41,4 +41,4 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1 -Test
 
 ## 版本与日志
 
-公开首版 1.0.0。Windows 文件版本写为 1.0.0.0，显示版本写为 1.0.0。开发更新日志放在 changelog，应用设置页不提供日志入口。
+公开首版 1.0.0，当前版本 1.0.1。Windows 文件版本写为 1.0.1.0，显示版本写为 1.0.1。开发更新日志放在 changelog，应用设置页不提供日志入口。
