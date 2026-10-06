@@ -63,12 +63,14 @@ Key 用 Windows 当前用户加密，保存在本机 `%LOCALAPPDATA%\EnglishComp
 
 <img width="601" height="428" alt="屏幕截图 2026-10-06 112813" src="https://github.com/user-attachments/assets/d8823843-5dcf-454c-a3e4-6dc4a5351abe" />
 <img width="604" height="425" alt="屏幕截图 2026-10-06 112754" src="https://github.com/user-attachments/assets/b5b9c35e-88e1-44d7-8784-edf359e1a724" />
+
 ↑目前的两款内置皮肤
 开发方式、检查方法和更新记录见 [开发说明](docs/development.md) 与 [changelog](changelog/)。更新日志只保存在文档里，设置窗口没有日志入口。
 
 ## 来源与许可
 
 想法与早期实践受到 [青简输入法](https://github.com/qingjian-team/qingjian) 的启发。语伴随后做成独立桌面工具，不需要修改青简、豆包或搜狗的文件，与这些产品没有隶属关系。
+
 作者一开始看到青简输入法这个项目的时候，感觉这真是个天才般的好主意，于是萌生了对其进行优化，并且上传优化版本的念头。但实际上手使用之后，发现它更偏向于以背单词为主，而用户需要在设置里面选用云服务才能进行整句翻译。于是作者结合自身学习英语的经历、习惯。开发出了这一款以先看到英文译文，并且听见地道发音为主，而单词查询、背诵为辅的软件———语伴。不仅仅是因为作者本身不喜欢背单词，我觉得这太死板了。而且作者认为更好的语言学习方式就是多听多读，把自己放入那个语言环境中去。甚至理想的状态就是：脑海中的一个概念，它能很自然地产出中文的释义与英文的释义这两种不同的版本。所以语言的运用其实是概念与想法先行，而不是单纯地对两种不同语言之间的对应单词进行单纯的翻译。
 
 代码采用 **GPL-3.0-or-later**。本地词典来自 [ECDICT](https://github.com/skywind3000/ECDICT)，字体使用站酷快乐体；各自许可与视觉素材来源见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
