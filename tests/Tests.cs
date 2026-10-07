@@ -162,8 +162,61 @@ namespace EnglishCompanion {
                 panel.SetExpanded(false);PumpLayout();
             }
         }
-        static void LiquidChecks() {
-            var canvas=new System.Windows.Controls.Canvas();
+        // 音色目录：必须反映这家服务商这台模型真实支持什么，不能跨平台编造。
+        static void VoiceCatalogChecks() {
+            // qwen-audio-3.1：15 个英语音色，官方把其中四个标为英式。
+            var v31 = new Configuration { SpeechModel = "qwen-audio-3.1-tts-flash" };
+            ProviderProfiles.Prepare(v31, "千问", true); v31.SpeechModel = "qwen-audio-3.1-tts-flash";
+            var list = SpeechProfiles.Catalog(v31);
+            Equal(16, list.Count, "3.1 lists the original voice plus 15 English voices");
+            var ids = new System.Collections.Generic.List<string>();
+            foreach (var v in list) ids.Add(v.Id);
+            foreach (var british in new[] { "Eric_v3.1", "Luca_v3.1", "Emily_v3.1", "Luna_v3.1" })
+                Equal(true, ids.Contains(british), "British voice offered: " + british);
+            foreach (var american in new[] { "Brian_v3.1", "David_v3.1", "Andy_v3.1", "Betty_v3.1" })
+                Equal(true, ids.Contains(american), "American voice offered: " + american);
+            // 3.1 的童声在官方文档里属于中文音色表，英文未标注，因此不得出现在英语选项里。
+            foreach (var chineseChild in new[] { "longjielidou_v3.1", "longpaopao_v3.1", "longhuohuo_v3.1" })
+                Equal(false, ids.Contains(chineseChild), "Chinese-only child voice not offered as English: " + chineseChild);
+
+            // qwen3-tts-flash：官方明确支持英语的童声在这里。
+            var v3 = new Configuration();
+            ProviderProfiles.Prepare(v3, "千问", true); v3.SpeechModel = "qwen3-tts-flash";
+            var flash = SpeechProfiles.Catalog(v3);
+            var flashIds = new System.Collections.Generic.List<string>();
+            foreach (var v in flash) flashIds.Add(v.Id);
+            Equal(true, flashIds.Contains("Bunny"), "girl voice offered on qwen3-tts-flash");
+            Equal(true, flashIds.Contains("Pip"), "boy voice offered on qwen3-tts-flash");
+            Equal(true, flashIds.Contains("Mochi"), "youth voice offered on qwen3-tts-flash");
+            Equal(true, flashIds.Contains("Stella"), "teen girl voice offered on qwen3-tts-flash");
+            // 两个模型给的是不同的目录，不能混为一谈。
+            Equal(false, flashIds.Contains("Emily_v3.1"), "a 3.1 voice never leaks into the 3.0 list");
+            Equal(false, ids.Contains("Bunny"), "a 3.0 voice never leaks into the 3.1 list");
+
+            // 非英语目标语言不提供这些选项，也不下发朗读指令。
+            var other = new Configuration();
+            ProviderProfiles.Prepare(other, "千问", true); other.SpeechModel = "qwen-audio-3.1-tts-flash"; other.Language = "Japanese";
+            Equal(false, SpeechProfiles.Supported(other), "English-only options are hidden for other target languages");
+            // 换一家服务商不会看到千问的音色。
+            var openai = new Configuration();
+            ProviderProfiles.Prepare(openai, "OpenAI", true);
+            var generic = SpeechProfiles.Catalog(openai);
+            var genericIds = new System.Collections.Generic.List<string>();
+            foreach (var v in generic) genericIds.Add(v.Id);
+            Equal(true, genericIds.Contains("marin") && genericIds.Contains("cedar"), "OpenAI exposes its documented built-in voices");
+            Equal(false, genericIds.Contains("Emily_v3.1"), "no Qwen voice leaks into OpenAI");
+            Equal(false, genericIds.Contains("Bunny"), "no Qwen child voice leaks into OpenAI");
+            // OpenAI 支持朗读偏好；没有公开口音的其它平台不给偏好入口。
+            Equal(true, SpeechProfiles.Supported(openai), "OpenAI supports reading preferences");
+            var silicon = new Configuration();
+            ProviderProfiles.Prepare(silicon, "硅基流动", true);
+            var sf = SpeechProfiles.Catalog(silicon);
+            var sfIds = new System.Collections.Generic.List<string>();
+            foreach (var v in sf) sfIds.Add(v.Id);
+            Equal(9, sf.Count, "SiliconFlow lists its eight documented voices plus the original");
+            Equal(false, SpeechProfiles.Supported(silicon), "a provider without a documented catalog gets no preference entry");
+        }
+        static void LiquidChecks() {            var canvas=new System.Windows.Controls.Canvas();
             var window=new System.Windows.Window {Title="语伴 · 动效检查",Width=820,Height=590,Content=canvas,ShowInTaskbar=false};
             var material=new GlassMist(window,canvas);material.SetEnabled(true);window.Show();PumpLayout();
             Console.WriteLine("Liquid GPU="+material.Hardware+"; frames="+material.FrameCount);
@@ -304,7 +357,12 @@ namespace EnglishCompanion {
                         var options=new SpeechOptionsWindow(owner,source);
                         owner.Dispatcher.BeginInvoke(new Action(delegate {
                             Field<System.Windows.Controls.ComboBox>(options,"style").SelectedIndex=2;
-                            Field<System.Windows.Controls.ComboBox>(options,"voice").SelectedIndex=3;
+                            // 按音色 ID 选择，不依赖列表顺序：目录以后增删也不会让这条检查失效。
+                            var picker=Field<System.Windows.Controls.ComboBox>(options,"voice");
+                            for(int i=0;i<picker.Items.Count;i++) {
+                                var item=picker.Items[i] as System.Windows.Controls.ComboBoxItem;
+                                if(item!=null&&(item.Tag as string)=="Emily_v3.1"){picker.SelectedIndex=i;break;}
+                            }
                             Field<System.Windows.Controls.Button>(options,"apply").RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
                         }));
                         options.Show();Equal("clear",source.SpeechStyle,"adopt transfers selected reading style into draft");Equal("Emily_v3.1",source.EnglishVoice,"adopt transfers selected English voice into draft");
@@ -505,6 +563,7 @@ namespace EnglishCompanion {
                 ProviderContractChecks();
                 SentencePairChecks();
                 Stage2Checks();
+                VoiceCatalogChecks();
                 if(Array.IndexOf(args,"--desktop-check")>=0) using(var tray=new TrayIcon(new System.Windows.Forms.ContextMenuStrip(),delegate {},true)) {
                     Equal(true,tray.Registered,"Windows accepts tray registration");
                     Equal(true,tray.HasRectangle(),"Windows exposes tray icon rectangle");

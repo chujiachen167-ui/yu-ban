@@ -78,6 +78,38 @@ namespace EnglishCompanion {
                 panel.SetPlayback(PlaybackState.Idle);
                 window.Close();
             }
+            // 朗读偏好窗口：音色列表的实际内容
+            foreach (var model in new[] { "qwen-audio-3.1-tts-flash", "qwen3-tts-flash" }) {
+                var c = new Configuration { SpeechModel = model, Theme = "glass" };
+                ProviderProfiles.Prepare(c, "千问", true); c.SpeechModel = model;
+                var owner = new Window { Width = 1, Height = 1, ShowInTaskbar = false, Left = -5000, Top = -5000 };
+                owner.Show();
+                var options = new SpeechOptionsWindow(owner, c);
+                var win = typeof(SpeechOptionsWindow).GetField("window", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(options) as Window;
+                win.Left = 60; win.Top = 60; win.Show();
+                Pump(500);
+                var combo = (System.Windows.Controls.ComboBox)typeof(SpeechOptionsWindow).GetField("voice", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(options);
+                combo.IsDropDownOpen = true;
+                Pump(300);
+                combo.IsDropDownOpen = false;
+                Pump(300);
+                // 下拉列表是独立的 Popup，单独把它渲染出来。
+                var list = combo.Template.FindName("PART_Popup", combo) as System.Windows.Controls.Primitives.Popup;
+                if (list != null && list.Child != null) {
+                    var host = list.Child as System.Windows.FrameworkElement;
+                    if (host != null) {
+                        host.Measure(new System.Windows.Size(double.PositiveInfinity, double.PositiveInfinity));
+                        host.UpdateLayout();
+                        int hh = (int)Math.Ceiling(host.ActualHeight);
+                        var bmp = new System.Windows.Media.Imaging.RenderTargetBitmap(Math.Max(1, (int)Math.Ceiling(host.ActualWidth)), Math.Max(1, hh), 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
+                        bmp.Render(host);
+                        var enc = new System.Windows.Media.Imaging.PngBitmapEncoder();
+                        enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bmp));
+                        using (var fs = System.IO.File.Create(System.IO.Path.Combine(directory, "voicelist-" + (model.Contains("3.1") ? "31" : "30") + ".png"))) enc.Save(fs);
+                    }
+                }
+                win.Close(); owner.Close();
+            }
             Console.WriteLine("Panel screenshots written to " + directory);
             return 0;
         }

@@ -75,8 +75,13 @@ namespace EnglishCompanion {
         internal static object SpeechBody(Configuration c, string text) {
             string provider=ProviderProfiles.SpeechProvider(c);
             if(provider=="OpenAI"||provider=="硅基流动") {
-                var body=new Dictionary<string,object> {{"model",c.SpeechModel},{"input",text},{"voice",c.Voice},{"response_format","wav"}};
+                var body=new Dictionary<string,object> {{"model",c.SpeechModel},{"input",text},{"voice",SpeechProfiles.Voice(c)},{"response_format","wav"}};
                 if(provider=="硅基流动"){body["sample_rate"]=24000;body["stream"]=false;}
+                // OpenAI 用 instructions 表达口音与情绪；只在该平台下发，其他平台会拒收。
+                if(provider=="OpenAI") {
+                    string guide=SpeechProfiles.Guide(c);
+                    if(guide.Length>0)body["instructions"]=guide;
+                }
                 return body;
             }
             if(provider=="ElevenLabs")return new {text=text,model_id=c.SpeechModel};
