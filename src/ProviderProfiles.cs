@@ -69,13 +69,34 @@ namespace EnglishCompanion {
             if(String.IsNullOrWhiteSpace(profile.Model)||profile.Model.Length>160)throw new InvalidOperationException("请填写平台上的完整模型名称");
             if(speech&&(String.IsNullOrWhiteSpace(profile.Voice)||profile.Voice.Length>200))throw new InvalidOperationException("请填写音色名称或音色 ID");
         }
-        internal static void Apply(Configuration c,string translation,string translationKey,string speech,string speechKey) {
+        // 翻译与语音分开处理：翻译配置有效就保存，语音的问题只影响朗读。
+        // 语音侧缺模型或缺工作空间时保留已填 Key 与地址，不阻断翻译，也不丢弃内容。
+        // 第三个返回值是语音侧的阻断原因，空字符串表示朗读已就绪。
+        internal static string Apply(Configuration c,string translation,string translationKey,string speech,string speechKey) {
             Prepare(c,translation,false);Prepare(c,speech,true);
             ValidateProfile(translation,false,Profile(c,translation,false));
-            if(!c.LocalVoice)ValidateProfile(speech,true,Profile(c,speech,true));
             c.TranslationSecret=Configuration.Seal(translationKey.Trim());c.TranslationKeys[translation]=c.TranslationSecret;
             c.ReuseKey=false;
-            if(!c.LocalVoice){c.SpeechSecret=Configuration.Seal(speechKey.Trim());c.SpeechKeys[speech]=c.SpeechSecret;}
+            if(c.LocalVoice)return "";
+            string speechValue=speechKey.Trim();
+            c.SpeechSecret=Configuration.Seal(speechValue);c.SpeechKeys[speech]=c.SpeechSecret;
+            try {
+                ValidateProfile(speech,true,Profile(c,speech,true));
+                var profile=Profile(c,speech,true);
+                if(QwenWorkspace.Required(profile,speechValue)&&!QwenWorkspace.Ready(profile))return "语音还缺工作空间配置";
+                if(String.IsNullOrWhiteSpace(profile.Model))return "尚未确认语音模型";
+            } catch(InvalidOperationException) { return "语音模型或地址尚未填好"; }
+            return "";
+        }
+        // 翻译是否可用：只看翻译这一侧，语音配置不参与判断。
+        internal static bool TranslationReady(Configuration c) { return Configuration.Open(c.TranslationSecret).Length>0; }
+        // 朗读是否可用，以及不可用时该告诉用户哪一件事。
+        internal static string SpeechBlocker(Configuration c) {
+            if(c.LocalVoice)return "";
+            if(String.IsNullOrWhiteSpace(c.SpeechModel))return "尚未确认语音模型";
+            string key=Configuration.Open(c.SpeechSecret);
+            if(key.Length==0)return "尚未填写语音 API Key";
+            return "";
         }
         internal static string Saved(Dictionary<string,string> keys,string provider) {string value;return keys.TryGetValue(provider,out value)?Configuration.Open(value):"";}
     }

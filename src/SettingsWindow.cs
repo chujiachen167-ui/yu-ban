@@ -133,15 +133,25 @@ namespace EnglishCompanion {
         }
         void Save() {
             try {
+                // 翻译与语音分开判断：语音没配好不该挡住翻译，用户也不必重填任何东西。
+                var speechBlocker="";
                 if(currentSpeech=="千问"&&!String.IsNullOrWhiteSpace(speechKey.Value)) {
                     var profile=ProviderProfiles.Profile(draft,currentSpeech,true);
                     if(QwenWorkspace.Required(profile,speechKey.Value)&&!QwenWorkspace.Ready(profile)&&!new QwenSpeechOptionsWindow(window,draft,speechKey.Value).Show()) {
-                        status.Text="语音配置尚未完成，已填写内容仍保留。";status.Visibility=Visibility.Visible;return;
+                        status.Text="语音配置尚未完成，已填写内容仍保留；翻译照常可以保存。";status.Visibility=Visibility.Visible;
+                        ProviderProfiles.Apply(draft,currentTranslation,translationKey.Value,currentSpeech,speechKey.Value);
+                        if(!preview)draft.Save();Result=draft;accepted=true;window.Close();return;
                     }
-                    var selected=ProviderProfiles.Profile(draft,currentSpeech,true);
-                    Services.ValidateSpeech(new Configuration {SpeechUrl=selected.Url,SpeechModel=selected.Model},speechKey.Value.Trim());
                 }
-                ProviderProfiles.Apply(draft,currentTranslation,translationKey.Value,currentSpeech,speechKey.Value); if(!preview) draft.Save(); Result=draft; accepted=true; window.Close();
+                speechBlocker=ProviderProfiles.Apply(draft,currentTranslation,translationKey.Value,currentSpeech,speechKey.Value);
+                if(!preview)draft.Save();Result=draft;accepted=true;
+                if(speechBlocker.Length>0) {
+                    // 翻译已经能用，语音的问题单独说明，不要求用户重填或重新保存。
+                    status.Text=translationKey.Value.Trim().Length>0
+                        ? "翻译已保存。朗读还需：" + speechBlocker + "（点设置旁的 i 可补齐，翻译不受影响）"
+                        : "已保存。翻译还需填写翻译 API Key；" + speechBlocker;
+                    status.Visibility=Visibility.Visible;window.Focus();
+                } else window.Close();
             }
             catch(InvalidOperationException e) {status.Text=e.Message;status.Visibility=Visibility.Visible;}
             catch { status.Text="保存失败，请重试；当前填写内容仍保留。"; status.Visibility=Visibility.Visible; }

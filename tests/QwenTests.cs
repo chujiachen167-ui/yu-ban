@@ -45,8 +45,18 @@ namespace EnglishCompanion {
                     owner.Dispatcher.BeginInvoke(new Action(delegate {Equal(1,owner.OwnedWindows.Count,"incomplete workspace opens setup during save");owner.OwnedWindows[0].Close();}));
                     confirm.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
                 }));PumpLayout();
-                Equal(null,settings.Result,"canceling incomplete setup does not save invalid profile");
+                // 阶段二：取消语音工作空间不再连翻译一起丢掉 —— 翻译先保存，朗读后补。
+                Equal(true,settings.Result!=null,"canceling speech setup still saves the translation side");
+                Equal("translation-contract-test",Configuration.Open(settings.Result.TranslationSecret),"translation key survives a canceled speech setup");
+                Equal(true,ProviderProfiles.TranslationReady(settings.Result),"translation is usable right after canceling speech setup");
                 Equal("sk-ws-contract-test",Field<KeyEntry>(settings,"speechKey").Value,"cancel retains already entered API key");
+            }
+            // 完成配置：一次确认走完，不需要再点一次主窗口。
+            using(var settings=new SettingsWindow(new Configuration(),true)) {
+                var owner=Field<Window>(settings,"window");owner.Show();PumpLayout();
+                Field<KeyEntry>(settings,"translationKey").Value="translation-contract-test";
+                Field<KeyEntry>(settings,"speechKey").Value="sk-ws-contract-test";
+                var confirm=(Button)owner.FindName("Confirm");
                 owner.Dispatcher.BeginInvoke(new Action(delegate {
                     owner.Dispatcher.BeginInvoke(new Action(delegate {
                         var setupWindow=owner.OwnedWindows[0];
@@ -57,6 +67,7 @@ namespace EnglishCompanion {
                 }));PumpLayout();
                 Equal(true,settings.Result!=null&&QwenWorkspace.Ready(settings.Result.SpeechProfiles["千问"]),"complete setup finishes original save without a second outer confirmation");
                 Equal("sk-ws-contract-test",Configuration.Open(settings.Result.SpeechSecret),"completed save retains workspace credential");
+                Equal(true,ProviderProfiles.TranslationReady(settings.Result),"translation is saved alongside a completed speech setup");
             }
         }
         static void SavedSettingsUiChecks() {

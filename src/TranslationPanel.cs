@@ -308,6 +308,15 @@ namespace EnglishCompanion {
             set {if(showOriginal==value)return;showOriginal=value;if(pairing==null)Original.Control.Visibility=value&&Original.Text.Length>0?Visibility.Visible:Visibility.Collapsed;BuildDocument();Resize(false);}
         }
         internal bool Fallback {set {Manual.Control.Visibility=value?Visibility.Visible:Visibility.Collapsed;}}
+        // 朗读未就绪时的原因：只在悬停朗读时说明，不加常驻小字。
+        // 语音未配置不影响翻译；这里只解释为什么这一次朗读不可用。
+        internal string SpeakBlocker {
+            set {
+                speakBlocker = value ?? "";
+                Speak.Control.ToolTip = speakBlocker.Length>0 ? "朗读暂不可用：" + speakBlocker + "。翻译不受影响，可在设置里补齐" : "朗读";
+            }
+        }
+        string speakBlocker="";
         internal bool Interacting {get {return window.IsMouseOver||card.IsMouseOver||dragging||editor.IsKeyboardFocusWithin;}}
         internal void Message(string text) {status.Text=text;status.Visibility=Visibility.Visible;Resize(false);}
         internal void SetPlayback(PlaybackState state,bool word=false) {Speak.SetPlayback(state);wordAudio.SetPlayback(word?state:PlaybackState.Idle);}

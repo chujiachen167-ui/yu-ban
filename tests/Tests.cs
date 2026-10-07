@@ -494,6 +494,7 @@ namespace EnglishCompanion {
                 }
                 ProviderContractChecks();
                 SentencePairChecks();
+                Stage2Checks();
                 if(Array.IndexOf(args,"--desktop-check")>=0) using(var tray=new TrayIcon(new System.Windows.Forms.ContextMenuStrip(),delegate {},true)) {
                     Equal(true,tray.Registered,"Windows accepts tray registration");
                     Equal(true,tray.HasRectangle(),"Windows exposes tray icon rectangle");

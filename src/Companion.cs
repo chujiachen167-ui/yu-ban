@@ -149,7 +149,11 @@ namespace EnglishCompanion {
                 // 逐句对照与整段排版用同一份结果；整段按钮与朗读只取完整译文。
                 translated = result.Target; overlay.Translation.Text = translated;
                 overlay.ShowPairs(result);
-                overlay.Learnable=true;overlay.Speak.Enabled = !demo;
+                overlay.Learnable=true;
+                // 朗读能不能用只看语音这一侧；语音没配好时翻译照常，朗读按钮单独说明。
+                string blocker = demo ? "" : ProviderProfiles.SpeechBlocker(config);
+                overlay.Speak.Enabled = !demo && blocker.Length == 0;
+                overlay.SpeakBlocker = blocker;
             } catch (OperationCanceledException) { }
             catch (Exception e) { if (current == generation && !disposed) { overlay.ClearPairs(); overlay.Translation.Text = e is InvalidOperationException ? e.Message : "处理失败，请检查设置后重试"; } }
         }
