@@ -13,12 +13,19 @@ namespace EnglishCompanion {
             var timer=new System.Windows.Threading.DispatcherTimer {Interval=TimeSpan.FromMilliseconds(milliseconds)};
             timer.Tick+=delegate {timer.Stop();frame.Continue=false;};timer.Start();System.Windows.Threading.Dispatcher.PushFrame(frame);
         }
+        static PairResult SamplePairs() {
+            var result=new PairResult {Source="今天我想早点出门。\n因为晚上可能会下雨。",Target="I want to leave early today. It might rain this evening.",Direction="English"};
+            result.Pairs.Add(new SentencePair {Id="s1",Source="今天我想早点出门。",Target="I want to leave early today."});
+            result.Pairs.Add(new SentencePair {Id="s2",Source="因为晚上可能会下雨。",Target="It might rain this evening."});
+            return result;
+        }
         static void PanelLayoutChecks() {
             using(var panel=new Overlay(true)) {
                 panel.Original.Text="测试原文";panel.Translation.Text="This is a short sentence.";panel.Learnable=true;
                 panel.Follow(new Rectangle(600,600,2,20));PumpLayout();
                 var window=Field<System.Windows.Window>(panel,"window");var fold=Field<OverlayButton>(panel,"fold");
-                double compact=window.ActualHeight;
+                // 富文本首次布局后再取基准；比较目标高度，避免动画中间帧干扰。
+                PumpLayout();double compact=window.Height;
                 Equal(true,Field<bool>(panel,"foldPointsUp"),"above-input compact arrow points upward to expand");
                 var close=Field<OverlayButton>(panel,"close");
                 double foldX=fold.Control.TranslatePoint(new System.Windows.Point(fold.Control.ActualWidth/2,0),window).X;
@@ -29,7 +36,8 @@ namespace EnglishCompanion {
                 Equal(true,window.ActualHeight>=compact+8&&window.ActualHeight<160,"short expansion adds modest spacing instead of empty 240px panel");
                 Equal(true,Field<bool>(panel,"expanded"),"fold enables expanded word lookup mode");
                 fold.Control.RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));PumpLayout();
-                Equal(true,Math.Abs(window.ActualHeight-compact)<2,"fold button restores compact height");
+                double restored=window.ActualHeight;
+                Equal(true,Math.Abs(restored-compact)<2,"fold button restores compact height");
                 panel.Translation.Text="We can read the complete sentence, listen carefully, and learn how each word is used in its context.";PumpLayout();compact=window.ActualHeight;
                 fold.Control.RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));PumpLayout();
                 Equal(true,window.ActualHeight>compact+8&&window.ActualHeight<240,"medium expansion fits content without forced blank area");
@@ -37,7 +45,6 @@ namespace EnglishCompanion {
                 panel.Translation.Text=String.Join(" ",System.Linq.Enumerable.Repeat("This scrollable sentence is long enough to require a visible scrollbar.",30));
                 fold.Control.RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));PumpLayout();
                 var scroll=Field<System.Windows.Controls.ScrollViewer>(panel,"scroll");
-                if(scroll.ScrollableHeight<=100)Console.WriteLine("Layout diagnostic: window="+window.ActualHeight+"; editor="+Field<System.Windows.Controls.TextBox>(panel,"editor").Height+"; actual="+Field<System.Windows.Controls.TextBox>(panel,"editor").ActualHeight+"; content="+Field<System.Windows.Controls.StackPanel>(panel,"textContent").ActualHeight+"; measure="+panel.Translation.Control.DesiredSize.Height+"; extent="+scroll.ExtentHeight+"; viewport="+scroll.ViewportHeight);
                 Equal(true,scroll.ScrollableHeight>100,"long translation overflows expanded viewport");
                 var bar=(System.Windows.Controls.Primitives.ScrollBar)scroll.Template.FindName("PART_VerticalScrollBar",scroll);
                 Equal(true,bar.IsVisible,"expanded long translation shows scrollbar");
@@ -80,6 +87,79 @@ namespace EnglishCompanion {
                 Equal(true,pixel[3]>100&&pixel[0]<245,"bottom-left rounded outline remains visible above footer");
                 bitmap.CopyPixels(new System.Windows.Int32Rect((int)window.ActualWidth-7,(int)window.ActualHeight-5,1,1),pixel,4,0);
                 Equal(true,pixel[3]>100&&pixel[0]<245,"bottom-right rounded outline remains visible above footer");
+            }
+        }
+        // 按句对照的浮窗行为：逐句成组、跨组选择、整段复制、查词上下文、收起展开共用。
+        static void PairPanelChecks() {
+            using(var panel=new Overlay(true)) {
+                var pairs=SamplePairs();
+                panel.Translation.Text=pairs.Target;panel.ShowPairs(pairs);panel.Learnable=true;
+                panel.Follow(new Rectangle(600,600,2,20));PumpLayout();
+                var editor=Field<System.Windows.Controls.RichTextBox>(panel,"editor");
+                var document=editor.Document;
+                Equal(4,document.Blocks.Count,"each group renders its own two lines");
+                // BlockCollection 在本绑定下没有索引器：按文档顺序枚举。
+                Func<int,System.Windows.Documents.Paragraph> block=delegate(int wanted){
+                    var all=new System.Collections.Generic.List<System.Windows.Documents.Block>();foreach(var b in document.Blocks)all.Add(b);
+                    return (System.Windows.Documents.Paragraph)all[wanted];
+                };
+                Func<System.Windows.Documents.Paragraph,string> line=delegate(System.Windows.Documents.Paragraph p){return new System.Windows.Documents.TextRange(p.ContentStart,p.ContentEnd).Text;};
+                var first=block(0);var second=block(1);var third=block(2);var fourth=block(3);
+                Equal("今天我想早点出门。",line(first),"group one source line");
+                Equal("I want to leave early today.",line(second),"group one target line");
+                Equal("因为晚上可能会下雨。",line(third),"group two source line");
+                Equal("It might rain this evening.",line(fourth),"group two target line");
+                // 组内距离小于组间距离，只靠段间距区分，不加分割线或卡片。
+                double inside=first.Margin.Bottom, between=second.Margin.Bottom;
+                Equal(true,inside<between,"distance inside a group is smaller than between groups");
+                // 跨组选择仍然连续可用。
+                int firstLength=line(first).Length+line(second).Length+line(third).Length+line(fourth).Length;
+                panel.SelectRange(0,firstLength);PumpLayout();
+                Equal(true,panel.SelectedLength()>0,"selection can span across groups");
+                panel.SelectRange(0,firstLength);
+                Equal(true,panel.SelectedLength()>0,"repeated selection stays usable");
+                editor.SelectAll();PumpLayout();
+                Equal(true,panel.SelectedLength()>0,"select all covers every group");
+                // 整段按钮只拿完整译文，不含原文与排版标记。
+                Equal("I want to leave early today. It might rain this evening.",pairs.Target,"whole-translation copy contains only the translation");
+                Equal(false,pairs.Target.Contains("今天我想早点出门。"),"whole-translation copy never includes the source");
+                // 仅译文模式去掉原文行，但同一份结果仍可用于朗读与复制。
+                panel.ShowOriginal=false;PumpLayout();
+                Equal(2,editor.Document.Blocks.Count,"translation-only shows one line per group");
+                Equal("I want to leave early today.",line(block(0)),"translation-only keeps the target line");
+                panel.ShowOriginal=true;PumpLayout();
+                Equal(4,editor.Document.Blocks.Count,"bilingual restores the source line");
+                // 查词上下文取所在句组，不串到相邻组。
+                var ranges=panel.Ranges;
+                Equal(4,ranges.Count,"each rendered line is tracked for hover lookup");
+                Equal(0,ranges[0].Group,"first line belongs to group one");
+                Equal(0,ranges[1].Group,"group one target shares the group");
+                Equal(1,ranges[2].Group,"third line starts group two");
+                Equal(true,ranges[1].Target&&!ranges[0].Target,"only the target line offers word lookup");
+                var groupText=(string)typeof(Overlay).GetMethod("GroupText",System.Reflection.BindingFlags.NonPublic|System.Reflection.BindingFlags.Instance).Invoke(panel,new object[]{1});
+                Equal(true,groupText.Contains("因为晚上可能会下雨。")&&groupText.Contains("It might rain this evening."),"word lookup uses its own group context");
+                // 展开与收起使用同一份结果，不要求额外点击生成对照。
+                var before=editor.Document.Blocks.Count;panel.SetExpanded(true);PumpLayout();
+                Equal(before,editor.Document.Blocks.Count,"expanding reuses the same paired result");
+                var scroll=Field<System.Windows.Controls.ScrollViewer>(panel,"scroll");
+                Equal(true,scroll.ExtentHeight>0,"paired content still measures inside the viewport");
+                panel.SetExpanded(false);PumpLayout();
+                Equal(before,editor.Document.Blocks.Count,"collapsing keeps the same paired result");
+                // 长段可滚动，且不出现横向滚动条。
+                var many=new PairResult {Source="长",Target=""};
+                for(int i=0;i<40;i++)many.Pairs.Add(new SentencePair {Id="s"+i,Source="这是第"+i+"句中文，用来撑开滚动区。",Target="This is English sentence number "+i+", long enough to require scrolling in the panel."});
+                var joined=new System.Text.StringBuilder();
+                for(int i=0;i<40;i++){if(i>0)joined.Append(' ');joined.Append(many.Pairs[i].Target);}
+                many.Target=joined.ToString();
+                panel.Translation.Text=many.Target;panel.ShowPairs(many);panel.SetExpanded(true);PumpLayout();
+                Equal(80,editor.Document.Blocks.Count,"long text keeps every group");
+                Equal(true,scroll.ScrollableHeight>100,"long paired text overflows the expanded viewport");
+                Equal(System.Windows.Controls.ScrollBarVisibility.Disabled,scroll.HorizontalScrollBarVisibility,"long paired text never scrolls horizontally");
+                scroll.ScrollToEnd();PumpLayout();
+                Equal(true,scroll.VerticalOffset>100,"paired viewport reaches the end of the text");
+                panel.ApplySkin("glass");panel.ApplySkin("ocean");panel.ApplySkin("baby");PumpLayout();
+                Equal(80,editor.Document.Blocks.Count,"switching skins never rebuilds or drops groups");
+                panel.SetExpanded(false);PumpLayout();
             }
         }
         static void LiquidChecks() {
@@ -155,12 +235,12 @@ namespace EnglishCompanion {
         static void PetChecks() {
             using(var panel=new Overlay(true)) {
                 panel.Translation.Text="A little company while you learn.";panel.Learnable=true;panel.ShowOriginal=false;panel.ApplySkin("ocean");panel.Follow(new Rectangle(700,600,2,20));PumpLayout();
-                var pet=Field<PetAdornment>(panel,"pet");var window=Field<System.Windows.Window>(panel,"window");var editor=Field<System.Windows.Controls.TextBox>(panel,"editor");
+                var pet=Field<PetAdornment>(panel,"pet");var window=Field<System.Windows.Window>(panel,"window");var editor=Field<System.Windows.Controls.RichTextBox>(panel,"editor");
                 Equal(false,pet.IsHitTestVisible,"pet never intercepts text or button input");
                 Equal(true,editor.TranslatePoint(new System.Windows.Point(0,0),window).X>pet.TranslatePoint(new System.Windows.Point(pet.ActualWidth,0),window).X,"pet has its own nonoverlapping rail");
                 if(System.Windows.SystemParameters.ClientAreaAnimation){Equal(true,pet.FrameCount>0,"visible themed pet animates");PumpLayout(4450);Equal(true,pet.BlinkCount>0,"pet changes to blink pose");}
-                editor.Select(0,4);PumpLayout();int frames=pet.FrameCount;PumpLayout();Equal(false,pet.Running,"selected text pauses decoration");Equal(frames,pet.FrameCount,"selection does not advance animation");
-                editor.Select(0,0);panel.Hide();PumpLayout();frames=pet.FrameCount;PumpLayout();Equal(false,pet.Running,"hidden panel stops pet");Equal(frames,pet.FrameCount,"hidden panel has no pet updates");
+                panel.SelectRange(0,4);PumpLayout();int frames=pet.FrameCount;PumpLayout();Equal(false,pet.Running,"selected text pauses decoration");Equal(frames,pet.FrameCount,"selection does not advance animation");
+                panel.SelectRange(0,0);panel.Hide();PumpLayout();frames=pet.FrameCount;PumpLayout();Equal(false,pet.Running,"hidden panel stops pet");Equal(frames,pet.FrameCount,"hidden panel has no pet updates");
                 panel.ApplySkin("baby");panel.Follow(new Rectangle(700,600,2,20));PumpLayout();Equal(true,pet.Visibility==System.Windows.Visibility.Visible,"frog pet is visible");
                 var frog=Field<System.Windows.Controls.Image>(pet,"open").Source;panel.ApplySkin("ocean");PumpLayout();Equal(false,Object.ReferenceEquals(frog,Field<System.Windows.Controls.Image>(pet,"open").Source),"skin switch changes character source");
                 panel.ApplySkin("glass");PumpLayout();Equal(false,pet.Running,"official default has no pet loop");Equal(System.Windows.Visibility.Collapsed,pet.Visibility,"official default has no pet rail");
@@ -413,12 +493,14 @@ namespace EnglishCompanion {
                     Equal(System.Threading.Tasks.TaskStatus.RanToCompletion,playback.Status,"playback recovers after child failure");
                 }
                 ProviderContractChecks();
+                SentencePairChecks();
                 if(Array.IndexOf(args,"--desktop-check")>=0) using(var tray=new TrayIcon(new System.Windows.Forms.ContextMenuStrip(),delegate {},true)) {
                     Equal(true,tray.Registered,"Windows accepts tray registration");
                     Equal(true,tray.HasRectangle(),"Windows exposes tray icon rectangle");
                     using(var overlay=new Overlay(true)) { Equal(false,overlay.Handle==IntPtr.Zero,"overlay initializes before first show"); overlay.Follow(new Rectangle(100,400,2,20)); Equal(true,overlay.Visible,"overlay displays through real HWND"); }
                 }
-                if(Array.IndexOf(args,"--panel-check")>=0) PanelLayoutChecks();
+                if(Array.IndexOf(args,"--panel-shot")>=0) return PanelShot.Capture(args[Array.IndexOf(args,"--panel-shot")+1]);
+                if(Array.IndexOf(args,"--panel-check")>=0) { PanelLayoutChecks(); PairPanelChecks(); }
                 if(Array.IndexOf(args,"--liquid-check")>=0) LiquidChecks();
                 if(Array.IndexOf(args,"--skin-check")>=0) SkinChecks();
                 if(Array.IndexOf(args,"--pet-check")>=0) PetChecks();

@@ -5,6 +5,7 @@ using System.Drawing;
 using System.IO;
 using System.Media;
 using System.Speech.Synthesis;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -17,7 +18,7 @@ namespace EnglishCompanion {
         readonly ProbeClient probe = new ProbeClient();
         readonly CaptureSession session = new CaptureSession();
         readonly TypingSession typing = new TypingSession();
-        readonly System.Collections.Generic.Dictionary<string,string> cache = new System.Collections.Generic.Dictionary<string,string>();
+        readonly System.Collections.Generic.Dictionary<string,PairResult> cache = new System.Collections.Generic.Dictionary<string,PairResult>();
         long ownerWindow;
         bool hasContent;
         readonly System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer { Interval = 80 };
@@ -77,7 +78,7 @@ namespace EnglishCompanion {
                     session.Start(last, DateTime.UtcNow,true); dismissed = "";
                     if(session.Active) {
                         CancelTranslation();StopVoice();hasContent=true;source=translated="";overlay.Learnable=false;
-                        overlay.Original.Text="";overlay.Translation.Text="正在听写…";overlay.Speak.Enabled=overlay.Retry.Enabled=false;overlay.Follow(last.Rect);
+                        overlay.ClearPairs();overlay.Original.Text="";overlay.Translation.Text="正在听写…";overlay.Speak.Enabled=overlay.Retry.Enabled=false;overlay.Follow(last.Rect);
                     }
                 }
             }
@@ -105,14 +106,14 @@ namespace EnglishCompanion {
             if(s.Window==ownerWindow && hasContent && !s.Editable && !held && action==0) {if(dismissed!=owner)overlay.Follow(last!=null?last.Rect:s.Rect);return;}
             if (s.Id != owner || s.Window!=ownerWindow) {
                 Reset(); overlay.Hide();owner = s.Id;ownerWindow=s.Window;dismissed = "";
-                overlay.Original.Text = "";overlay.Translation.Text="";
+                overlay.ClearPairs();overlay.Original.Text = "";overlay.Translation.Text="";
             }
             overlay.Fallback=!s.Editable;
-            if (!s.Editable && (action != 0 || (held && !combo))) { hasContent=true;dismissed="";overlay.Learnable=false;overlay.Translation.Text=s.Reason; }
-            if (action == 103) { session.Start(s, DateTime.UtcNow); dismissed = ""; overlay.Translation.Text = "本轮捕获已开始，请输入或粘贴一句中文"; }
+            if (!s.Editable && (action != 0 || (held && !combo))) { hasContent=true;dismissed="";overlay.Learnable=false;overlay.ClearPairs();overlay.Translation.Text=s.Reason; }
+            if (action == 103) { session.Start(s, DateTime.UtcNow); dismissed = ""; overlay.ClearPairs();overlay.Translation.Text = "本轮捕获已开始，请输入或粘贴一句中文"; }
             if (action == 102) {
                 if (s.Selection.Length > 0) { dismissed = ""; overlay.Follow(s.Rect); var selectedTask=Translate(s.Selection); }
-                else { hasContent=true;overlay.Fallback=true;overlay.Translation.Text = "未读到选中文字，可点击下方“粘贴翻译”。"; }
+                else { hasContent=true;overlay.Fallback=true;overlay.ClearPairs();overlay.Translation.Text = "未读到选中文字，可点击下方“粘贴翻译”。"; }
             }
             bool capturing=held||session.Active;
             int revision=typing.Revision;
@@ -136,20 +137,36 @@ namespace EnglishCompanion {
             if (translationJob != null) { translationJob.Cancel(); translationJob.Dispose(); }
             translationJob = new CancellationTokenSource(); var token = translationJob.Token;
             StopVoice(); source = text; translated = ""; audio = null; audioText = "";
-            overlay.Original.Text = text; overlay.Translation.Text = "正在翻译整句…";
+            overlay.ClearPairs();overlay.Original.Text = text; overlay.Translation.Text = "正在翻译整句…";
             overlay.Speak.Enabled = false; overlay.Retry.Enabled = true;
             try {
-                string result;
+                PairResult result;
                 if (demo) {
                     await Task.Delay(250, token);
-                    if (text == "我明天想去看电影。") result = "I'd like to go to the movies tomorrow.";
-                    else if (text == "我原本打算今天完成，但临时有别的事情。") result = "I was planning to finish it today, but something came up.";
-                    else result = "[离线演示] 已捕获本轮输入；真实译文需要填写 API Key。";
-                } else if(!cache.TryGetValue(text,out result)) { result=await Services.Translate(config,text,token);if(current==generation){if(cache.Count>=32)cache.Clear();cache[text]=result;} }
+                    result = Demo(text);
+                } else if(!cache.TryGetValue(text,out result)) { result=await Services.TranslatePaired(config,text,token);if(current==generation){if(cache.Count>=32)cache.Clear();cache[text]=result;} }
                 if (current != generation || disposed) return;
-                translated = result; overlay.Translation.Text = result; overlay.Learnable=true;overlay.Speak.Enabled = !demo;
+                // 逐句对照与整段排版用同一份结果；整段按钮与朗读只取完整译文。
+                translated = result.Target; overlay.Translation.Text = translated;
+                overlay.ShowPairs(result);
+                overlay.Learnable=true;overlay.Speak.Enabled = !demo;
             } catch (OperationCanceledException) { }
-            catch (Exception e) { if (current == generation && !disposed) overlay.Translation.Text = e is InvalidOperationException ? e.Message : "处理失败，请检查设置后重试"; }
+            catch (Exception e) { if (current == generation && !disposed) { overlay.ClearPairs(); overlay.Translation.Text = e is InvalidOperationException ? e.Message : "处理失败，请检查设置后重试"; } }
+        }
+        // 离线演示不联网，用固定对照展示排版与交互。
+        static PairResult Demo(string text) {
+            var groups = Sentences.Groups(text);
+            var result = new PairResult { Source = text, Direction = "English" };
+            var samples = new[]{"I'd like to go to the movies tomorrow.","I was planning to finish it today, but something came up.","Okay, let me try again now.","That sounds like a good idea to me.","Let me take a look at it for a moment."};
+            var parts = new StringBuilder();
+            for (int i = 0; i < groups.Count; i++) {
+                string target = groups.Count == 1 && text == "我明天想去看电影。" ? samples[0]
+                    : groups.Count == 1 && text == "我原本打算今天完成，但临时有别的事情。" ? samples[1] : samples[2];
+                groups[i].Target = target; if (i > 0) parts.Append(' '); parts.Append(target);
+                result.Pairs.Add(groups[i]);
+            }
+            result.Target = parts.Length > 0 ? parts.ToString() : "[离线演示] 已捕获本轮输入；真实译文需要填写 API Key。";
+            return result;
         }
         async Task Speak(string selectedWord=null) {
             if (speechJob != null) { StopVoice(); return; }

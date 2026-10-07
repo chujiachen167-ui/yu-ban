@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -6,15 +7,16 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Documents;
 using System.Windows.Input;
-using System.Windows.Interop;
-using System.Windows.Media;
+using System.Windows.Interop;using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using Rectangle=System.Drawing.Rectangle;
 using Forms=System.Windows.Forms;
 
 namespace EnglishCompanion {
+    // 浮窗：按句中英对照渲染、整段复制、悬停查词、展开收起与动画。
     internal sealed class Overlay : IDisposable {
         readonly Window window;
         readonly Border shell,footer,outline;
@@ -24,7 +26,13 @@ namespace EnglishCompanion {
         bool foldPointsUp;
         readonly ScrollViewer scroll;
         readonly StackPanel textContent;
-        readonly TextBox editor;
+        // 一个只读富文本承载全部内容：逐句对照是排版，不是多个独立控件，
+        // 因此拖选可以跨组、选区不会因为查词或重绘而丢失。
+        readonly RichTextBox editor;
+        readonly FlowDocument document = NewDocument();
+        readonly List<GroupRange> ranges = new List<GroupRange>();
+        // 供检查使用：当前渲染出的每行所属的句组。
+        internal List<GroupRange> Ranges { get { return ranges; } }
         readonly TextBlock status;
         readonly OverlayButton fold,close,copy,pin,wordAudio,contextButton,cardClose;
         readonly System.Windows.Shapes.Path pinShape;
@@ -41,17 +49,20 @@ namespace EnglishCompanion {
         readonly DispatcherTimer copyFeedback=new DispatcherTimer {Interval=TimeSpan.FromMilliseconds(1400)};
         CancellationTokenSource explainJob;
         bool expanded,learnable,pinned,dragging,disposed,previewMode,showOriginal=true,hasAnchor;
-        string skinId="glass",activeWord="",hoverWord="";
+        string skinId="glass",activeWord="",hoverWord="",hoverContext="";
+        PairResult pairing;
         int cardVersion;
         int resizeVersion;
         bool resizing;
         Rectangle anchor;
 
+        // 一段文字在文档中的位置，用来把悬停点还原到它所在的句组。
+        internal struct GroupRange { internal TextPointer Start, End; internal int Group; internal bool Target; }
+
         [DllImport("user32.dll",EntryPoint="GetWindowLongPtrW")] static extern IntPtr GetStyle(IntPtr hwnd,int index);
         [DllImport("user32.dll",EntryPoint="SetWindowLongPtrW")] static extern IntPtr SetStyle(IntPtr hwnd,int index,IntPtr value);
 
-        internal Overlay(bool demo) {
-            window=new Window {Title=demo?"语伴 · 离线演示":"语伴 · 整句翻译",Width=430,Height=140,
+        internal Overlay(bool demo) {            window=new Window {Title=demo?"语伴 · 离线演示":"语伴 · 整句翻译",Width=430,Height=140,
                 WindowStyle=WindowStyle.None,ResizeMode=ResizeMode.NoResize,AllowsTransparency=true,Background=Brushes.Transparent,
                 Topmost=true,ShowInTaskbar=false,ShowActivated=false,FontFamily=new FontFamily("Microsoft YaHei UI"),UseLayoutRounding=true};
             shell=new Border {CornerRadius=new CornerRadius(16),BorderThickness=new Thickness(1)};
@@ -65,14 +76,18 @@ namespace EnglishCompanion {
             body.ColumnDefinitions.Add(new ColumnDefinition());body.ColumnDefinitions.Add(new ColumnDefinition {Width=new GridLength(40)});
             grid.Children.Add(body);
             textContent=new StackPanel {Margin=new Thickness(5,3,6,2)};
-            Original=new OverlayText(new TextBlock {FontSize=12,TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,7)});
-            textContent.Children.Add(Original.Control);
-            Translation=new OverlayText(new TextBlock {FontSize=17,FontFamily=new FontFamily("Segoe UI"),TextWrapping=TextWrapping.Wrap});
-            editor=new TextBox {IsReadOnly=true,IsReadOnlyCaretVisible=false,AcceptsReturn=true,TextWrapping=TextWrapping.Wrap,
-                BorderThickness=new Thickness(0),Padding=new Thickness(0),Background=Brushes.Transparent,FontFamily=new FontFamily("Segoe UI"),
-                FontSize=17,VerticalScrollBarVisibility=ScrollBarVisibility.Disabled,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled,
-                MinHeight=24,SelectionBrush=Skin.Brush("#5C8FDC"),SelectionOpacity=0.35};
-            System.Windows.Automation.AutomationProperties.SetName(editor,"译文");textContent.Children.Add(editor);
+            // 原文与译文是同一份结果的两种读法：句组排版由 FlowDocument 承载，
+            // 这两个对象只负责保存整段文字，供复制、朗读、缓存与降级使用。
+            Original=new OverlayText(new TextBlock {FontSize=12,TextWrapping=TextWrapping.Wrap,Visibility=Visibility.Collapsed});
+            Translation=new OverlayText(new TextBlock {FontSize=15,FontFamily=new FontFamily("Segoe UI")});
+            document.PagePadding=new Thickness(0);
+            editor=new RichTextBox {IsReadOnly=true,IsReadOnlyCaretVisible=false,AutoWordSelection=true,
+                BorderThickness=new Thickness(0),Padding=new Thickness(0),Margin=new Thickness(0),Background=Brushes.Transparent,
+                VerticalScrollBarVisibility=ScrollBarVisibility.Disabled,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled,
+                MinHeight=24,SelectionBrush=Skin.Brush("#5C8FDC"),SelectionOpacity=0.35,Focusable=true,
+                FontFamily=new FontFamily("Microsoft YaHei UI"),FontSize=13,Document=document};
+            System.Windows.Automation.AutomationProperties.SetName(editor,"对照译文");
+            textContent.Children.Add(editor);
             // Focusing a tall editor must not scroll the entire editor into view and move the word under the pointer.
             editor.RequestBringIntoView+=delegate(object sender,RequestBringIntoViewEventArgs e) {e.Handled=true;};
             status=new TextBlock {FontSize=11,TextWrapping=TextWrapping.Wrap,Visibility=Visibility.Collapsed,Margin=new Thickness(0,7,0,0)};
@@ -120,17 +135,17 @@ namespace EnglishCompanion {
             explanation=new TextBlock {FontSize=12,TextWrapping=TextWrapping.Wrap,Foreground=Skin.Brush("#526782")};
             stack.Children.Add(new ScrollViewer {Content=explanation,MaxHeight=125,VerticalScrollBarVisibility=ScrollBarVisibility.Auto});
             card.MouseEnter+=delegate {leave.Stop();};card.MouseLeave+=delegate {if(!pinned)leave.Start();};
-            hover.Tick+=async delegate {hover.Stop();if(!dragging&&editor.SelectionLength==0&&Mouse.LeftButton==MouseButtonState.Released&&hoverWord.Length>0&&!pinned)await ShowWord(hoverWord);};
+            hover.Tick+=async delegate {hover.Stop();if(!dragging&&SelectedLength()==0&&Mouse.LeftButton==MouseButtonState.Released&&hoverWord.Length>0&&!pinned)await ShowWord(hoverWord);};
             leave.Tick+=delegate {leave.Stop();if(!pinned&&!card.IsMouseOver&&!editor.IsMouseOver)CloseCard();};
             editor.MouseMove+=HoverWord;
             editor.MouseLeave+=delegate {hover.Stop();hoverWord="";if(!pinned)leave.Start();};
             editor.PreviewMouseLeftButtonDown+=delegate {dragging=true;pet.Pause(true);CloseCard();window.Activate();editor.Focus();};
-            editor.PreviewMouseLeftButtonUp+=delegate {dragging=false;pet.Pause(editor.SelectionLength>0);window.Dispatcher.BeginInvoke(new Action(delegate {if(!disposed)HoverWord(editor,new MouseEventArgs(Mouse.PrimaryDevice,Environment.TickCount));}));};editor.LostMouseCapture+=delegate {dragging=false;pet.Pause(editor.SelectionLength>0);};
-            editor.SelectionChanged+=delegate {pet.Pause(dragging||editor.SelectionLength>0);if(editor.SelectionLength>0)CloseCard();};
+            editor.PreviewMouseLeftButtonUp+=delegate {dragging=false;pet.Pause(SelectedLength()>0);window.Dispatcher.BeginInvoke(new Action(delegate {if(!disposed)HoverWord(editor,new MouseEventArgs(Mouse.PrimaryDevice,Environment.TickCount));}));};editor.LostMouseCapture+=delegate {dragging=false;pet.Pause(SelectedLength()>0);};
+            editor.SelectionChanged+=delegate {pet.Pause(dragging||SelectedLength()>0);if(SelectedLength()>0)CloseCard();};
             editor.PreviewMouseWheel+=delegate(object sender,MouseWheelEventArgs e) {CloseCard();scroll.ScrollToVerticalOffset(scroll.VerticalOffset-e.Delta/3.0);e.Handled=true;};
             scroll.ScrollChanged+=delegate {if(!pinned)CloseCard();};
-            Original.Changed=delegate {Original.Control.Visibility=showOriginal&&Original.Text.Length>0?Visibility.Visible:Visibility.Collapsed;Resize(false);};
-            Translation.Changed=delegate {CloseCard();copyFeedback.Stop();copy.Glyph="\uE8C8";copy.Name("复制译文");editor.Text=Translation.Text;status.Visibility=Visibility.Collapsed;scroll.ScrollToTop();Resize(false);};
+            Original.Changed=delegate {if(pairing==null)RebuildPlain();};
+            Translation.Changed=delegate {if(pairing==null)RebuildPlain();};
             window.SizeChanged+=delegate {if(hasAnchor&&!disposed&&!resizing)Place();};
             window.SourceInitialized+=delegate {
                 var s=HwndSource.FromHwnd(new WindowInteropHelper(window).Handle);s.CompositionTarget.BackgroundColor=Colors.Transparent;
@@ -140,6 +155,139 @@ namespace EnglishCompanion {
             };
         }
 
+        // ---------- 内容：整段、单控件、逐句成组 ----------
+
+        // 句组结果：每组原文一行、译文一行，组内紧、组间松。收起与展开共用同一份内容。
+        internal void ShowPairs(PairResult result) {
+            CloseCard();copyFeedback.Stop();copy.Glyph="\uE8C8";copy.Name("复制译文");
+            pairing=result;status.Visibility=Visibility.Collapsed;
+            BuildDocument();scroll.ScrollToTop();Resize(false);Settle();
+        }
+        // 富文本的真实高度要在窗口完成一次布局后才稳定；此时再对齐一次窗口高度。
+        void Settle() {
+            if (!window.IsVisible) return;
+            window.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, new Action(ResizeLater));
+        }
+        void ResizeLater() { if (!disposed) { Resize(false); PumpOnce(); Resize(false); } }
+        // 让 WPF 完成一次布局通道，使下一次测量拿到真实高度。
+        void PumpOnce() {
+            var frame = new System.Windows.Threading.DispatcherFrame();
+            var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(0) };
+            timer.Tick += delegate { timer.Stop(); frame.Continue = false; };
+            timer.Start();
+            System.Windows.Threading.Dispatcher.PushFrame(frame);
+        }
+        // 回到整段排版：提示、错误、听写中与清空都走这条路。
+        internal void ClearPairs() {
+            if (pairing==null) return;
+            pairing=null;RebuildPlain();
+        }
+        // 非对照内容（提示、错误、听写中）：仍然是同一个只读控件，排版与选择行为一致。
+        void RebuildPlain() {
+            CloseCard();status.Visibility=Visibility.Collapsed;
+            BuildDocument();scroll.ScrollToTop();Resize(false);
+        }
+        void BuildDocument() {
+            document.Blocks.Clear();ranges.Clear();
+            if (pairing!=null&&pairing.Pairs!=null&&pairing.Pairs.Count>0) {
+                bool bilingual=showOriginal;
+                var shown=new List<SentencePair>();
+                for (int i = 0; i < pairing.Pairs.Count; i++)
+                    if (pairing.Pairs[i] != null && pairing.Pairs[i].Target != null && pairing.Pairs[i].Target.Length > 0) shown.Add(pairing.Pairs[i]);
+                for (int i = 0; i < shown.Count; i++) {
+                    var pair = shown[i];
+                    bool last = i == shown.Count - 1;
+                    if (bilingual && pair.Source != null && pair.Source.Length > 0) {
+                        var top = new Paragraph {Margin=new Thickness(0,0,0,1)};
+                        top.Inlines.Add(Source(pair.Source));
+                        document.Blocks.Add(top);
+                        Record(top, i, false);
+                    }
+                    // 组内紧、组间略松：只用段间距表达，不加分隔线、卡片或说明文字。
+                    var bottom = new Paragraph {Margin=new Thickness(0,0,0,last?0:9)};
+                    bottom.Inlines.Add(Target(pair.Target));
+                    document.Blocks.Add(bottom);
+                    Record(bottom, i, true);
+                }
+            } else {
+                string text = Translation.Text ?? "";
+                if (text.Length > 0) {
+                    var only = new Paragraph {Margin=new Thickness(0)};
+                    only.Inlines.Add(new Run(text) {FontSize = 15, FontFamily = new FontFamily("Segoe UI")});
+                    document.Blocks.Add(only);
+                    Record(only, 0, true);
+                }
+            }
+        }
+        // 原文行：稍小、稍淡；译文行：更突出。长句照常换行，不截断、不缩小到难读。
+        Run Source(string value) { return new Run(value) { FontSize = 12, FontFamily = new FontFamily("Microsoft YaHei UI") }; }
+        Run Target(string value) { return new Run(value ?? "") { FontSize = 15, FontFamily = new FontFamily("Segoe UI") }; }
+        // 记录每段在文档中的位置；Range 持有 TextPosition，不依赖偏移量在后续编辑中保持不变。
+        void Record(Paragraph block,int group,bool isTarget) {
+            var range = new TextRange(block.ContentStart, block.ContentEnd);
+            ranges.Add(new GroupRange { Start = range.Start, End = range.End, Group = group, Target = isTarget });
+        }
+        void RestyleDocument() {
+            var s = Skin.Get(skinId);
+            foreach (var record in ranges) {
+                if (record.Start == null || record.End == null) continue;
+                var run = record.Start.Parent as Run; if (run == null) continue;
+                run.Foreground = Skin.Brush(record.Target ? s.Ink : s.Muted);
+            }
+        }
+
+        // ---------- 选择、复制与查词 ----------
+
+        // 悬停点先还原成字符位置，再找出它所在的句组；同一组两侧共享上下文。
+        GroupRange RangeAt(Point point) {
+            var hit = editor.GetPositionFromPoint(point, true);
+            if (hit == null) return new GroupRange { Group = -1 };
+            return GroupAt(hit.GetPositionAtOffset(0));
+        }
+        // 文档内的绝对偏移：TextPointer 没有公开 Offset，用与文档起点的距离代替。
+        int OffsetOf(TextPointer position) { return position == null ? -1 : document.ContentStart.GetOffsetToPosition(position); }
+        GroupRange GroupAt(TextPointer position) {
+            GroupRange found = new GroupRange { Group = -1 };
+            int offset = OffsetOf(position);
+            if (offset < 0) return found;
+            foreach (var record in ranges) {
+                if (record.Start == null) continue;
+                if (offset < OffsetOf(record.Start) || offset > OffsetOf(record.End)) continue;
+                // 悬停落在原文行时，仍然用该组的上下文；两组相邻时不串组。
+                if (found.Group < 0 || found.Group != record.Group) found = record;
+            }
+            return found;
+        }
+        // 查词和“结合本句解释”都用整组原文+译文，不从屏幕上拼凑。
+        // 索引与 BuildDocument 的过滤结果一致：只包含真正对齐的组。
+        string GroupText(int group) {
+            if (pairing == null || pairing.Pairs == null || group < 0) return Translation.Text;
+            var shown = new List<SentencePair>();
+            for (int i = 0; i < pairing.Pairs.Count; i++)
+                if (pairing.Pairs[i] != null && pairing.Pairs[i].Target != null && pairing.Pairs[i].Target.Length > 0) shown.Add(pairing.Pairs[i]);
+            if (group >= shown.Count) return Translation.Text;
+            var pair = shown[group];
+            return showOriginal && pair.Source != null && pair.Source.Length > 0
+                ? pair.Source + "\n" + pair.Target : pair.Target;
+        }
+
+        // 段落的默认外边距会让行距忽大忽小：统一清零，只用我们自己的组间距。
+        static FlowDocument NewDocument() {
+            var d = new FlowDocument { PagePadding = new Thickness(0) };
+            var style = new Style(typeof(Paragraph));
+            style.Setters.Add(new Setter(Paragraph.MarginProperty, new Thickness(0)));
+            style.Setters.Add(new Setter(TextBlock.FontFamilyProperty, new FontFamily("Microsoft YaHei UI")));
+            style.Setters.Add(new Setter(TextBlock.FontSizeProperty, 13.0));
+            d.Blocks.Add(new Paragraph());
+            return d;
+        }
+        internal int SelectedLength() { return editor.Selection.IsEmpty ? 0 : Math.Abs(editor.Selection.End.GetOffsetToPosition(editor.Selection.Start)); }
+        // 按文档偏移选择，供检查与键盘操作使用。
+        internal void SelectRange(int start,int length) {
+            var from=document.ContentStart.GetPositionAtOffset(start);
+            var to=document.ContentStart.GetPositionAtOffset(start+length);
+            editor.Selection.Select(from,to);editor.Focus();
+        }
         static ControlTemplate LeftScrollTemplate() {
             return (ControlTemplate)System.Windows.Markup.XamlReader.Parse(@"<ControlTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml' TargetType='ScrollViewer'>
               <Grid><Grid.ColumnDefinitions><ColumnDefinition Width='Auto'/><ColumnDefinition Width='*'/></Grid.ColumnDefinitions>
@@ -155,7 +303,10 @@ namespace EnglishCompanion {
               </Grid></ControlTemplate>");
         }
         internal bool Learnable {set {learnable=value;copy.Enabled=value;if(!value)CloseCard();}}
-        internal bool ShowOriginal {get {return showOriginal;} set {showOriginal=value;Original.Control.Visibility=value&&Original.Text.Length>0?Visibility.Visible:Visibility.Collapsed;Resize(false);}}
+        internal bool ShowOriginal {
+            get {return showOriginal;}
+            set {if(showOriginal==value)return;showOriginal=value;if(pairing==null)Original.Control.Visibility=value&&Original.Text.Length>0?Visibility.Visible:Visibility.Collapsed;BuildDocument();Resize(false);}
+        }
         internal bool Fallback {set {Manual.Control.Visibility=value?Visibility.Visible:Visibility.Collapsed;}}
         internal bool Interacting {get {return window.IsMouseOver||card.IsMouseOver||dragging||editor.IsKeyboardFocusWithin;}}
         internal void Message(string text) {status.Text=text;status.Visibility=Visibility.Visible;Resize(false);}
@@ -170,12 +321,11 @@ namespace EnglishCompanion {
         void Resize(bool animate) {
             if(textContent==null||scroll==null)return;
             double width=skinId=="glass"?355:277;
-            Original.Control.Measure(new Size(width,Double.PositiveInfinity));
-            Translation.Control.Measure(new Size(width,Double.PositiveInfinity));
+            // 用临时容器量一次真实文本高度：直接量 editor 会被上一次写入的 Height 反馈放大。
+            double editorHeight=MeasureContent(width);
+            editor.Height=editorHeight;
             status.Measure(new Size(width,Double.PositiveInfinity));
-            // Give the read-only editor its complete text height. The outer viewport alone scrolls.
-            editor.Height=Math.Max(24,Translation.Control.DesiredSize.Height+10);
-            double content=editor.Height+(showOriginal&&Original.Text.Length>0?Original.Control.DesiredSize.Height+7:0)+(status.Visibility==Visibility.Visible?status.DesiredSize.Height+7:0);
+            double content=editorHeight+(status.Visibility==Visibility.Visible?status.DesiredSize.Height+7:0);
             textContent.Margin=new Thickness(skinId=="glass"?5:83,3+(skinId!="glass"?Math.Max(0,(72-content)/2):0),6,2);
             if(skinId!="glass")content=Math.Max(72,content);
             // Updating the read-only editor height can leave the outer custom presenter at its old extent.
@@ -203,20 +353,44 @@ namespace EnglishCompanion {
                 window.BeginAnimation(FrameworkElement.HeightProperty,null);window.BeginAnimation(Window.TopProperty,null);window.BeginAnimation(Window.LeftProperty,null);resizing=false;
             }
         }
+        // RichTextBox 在窗口真正显示之前永远只量出最小高度；此时排版结果没有意义。
+        // 因此先按最小高度占位，显示后再按真实高度对齐一次。
+        double MeasureContent(double width) {
+            if (!window.IsVisible) return 24;
+            double pinned = editor.Height;
+            editor.ClearValue(FrameworkElement.HeightProperty);
+            editor.Width = width;
+            editor.InvalidateMeasure();
+            editor.Measure(new Size(width, Double.PositiveInfinity));
+            double text = editor.DesiredSize.Height;
+            editor.ClearValue(FrameworkElement.WidthProperty);
+            editor.Height = pinned;
+            return Math.Max(24, text);
+        }
         static DoubleAnimation Motion(double from,double to,double duration) {return new DoubleAnimation(from,to,TimeSpan.FromMilliseconds(duration)) {EasingFunction=new CubicEase {EasingMode=EasingMode.EaseOut}};}
+        // 整段按钮只拿完整译文，不含原文、不含屏幕上的排版标记。
         void CopyAll() {
             if(!learnable||Translation.Text.Length==0)return;
             try {Clipboard.SetText(Translation.Text);copy.Glyph="\uE73E";copy.Name("已复制");copyFeedback.Stop();copyFeedback.Start();}
             catch(ExternalException) {Message("复制暂不可用，请重试");}
         }
         void HoverWord(object sender,MouseEventArgs e) {
-            if(!expanded||!learnable||pinned||dragging||editor.SelectionLength>0||Mouse.LeftButton==MouseButtonState.Pressed||editor.ContextMenu.IsOpen) {hover.Stop();return;}
-            int at=editor.GetCharacterIndexFromPoint(e.GetPosition(editor),false);
-            string word=WordAt(editor.Text,at);
-            if(word==hoverWord)return;
-            hover.Stop();hoverWord=word;
+            if(!expanded||!learnable||pinned||dragging||SelectedLength()>0||Mouse.LeftButton==MouseButtonState.Pressed||editor.ContextMenu.IsOpen) {hover.Stop();return;}
+            var at = e != null ? RangeAt(e.GetPosition(editor)) : new GroupRange { Group = -1 };
+            // 查词只在译文行上触发：原文是中文，行内没有英文词。
+            string text = at.Target ? TextAt(at) : "";
+            int offset = at.Target ? OffsetIn(e, at) : 0;
+            string word = WordAt(text, offset);
+            if (word == hoverWord) return;
+            hover.Stop();hoverWord=word;hoverContext=GroupText(at.Group);
             if(word.Length==0) {if(!pinned)CloseCard();return;}
             leave.Stop();hover.Start();
+        }
+        string TextAt(GroupRange record) { if(record.Start==null||record.End==null)return"";return new TextRange(record.Start,record.End).Text; }
+        int OffsetIn(MouseEventArgs e,GroupRange record) {
+            if(e==null||record.Start==null)return 0;
+            var hit=editor.GetPositionFromPoint(e.GetPosition(editor),true);if(hit==null)return 0;
+            return OffsetOf(hit.GetPositionAtOffset(0))-OffsetOf(record.Start);
         }
         internal static string WordAt(string text,int index) {
             if(index<0||index>=text.Length)return "";
@@ -233,11 +407,11 @@ namespace EnglishCompanion {
         }
         async Task Explain() {
             if(ExplainWord==null||explainJob!=null)return;int version=cardVersion;explainJob=new CancellationTokenSource();contextButton.Enabled=false;explanation.Text="正在解释…";
-            try {var result=await ExplainWord(activeWord,Translation.Text,explainJob.Token);if(version==cardVersion)explanation.Text=result;}
+            try {var result=await ExplainWord(activeWord,hoverContext.Length>0?hoverContext:Translation.Text,explainJob.Token);if(version==cardVersion)explanation.Text=result;}
             catch(OperationCanceledException){}catch(Exception e){if(version==cardVersion)explanation.Text=e is InvalidOperationException?e.Message:"解释暂不可用，请重试";}
             finally {if(version==cardVersion){explainJob.Dispose();explainJob=null;contextButton.Enabled=true;}}
         }
-        void CloseCard() {hover.Stop();leave.Stop();hoverWord="";pinned=false;cardVersion++;popup.IsOpen=false;UpdatePin();if(explainJob!=null){explainJob.Cancel();explainJob.Dispose();explainJob=null;}contextButton.Enabled=true;}
+        void CloseCard() {hover.Stop();leave.Stop();hoverWord="";hoverContext="";pinned=false;cardVersion++;popup.IsOpen=false;UpdatePin();if(explainJob!=null){explainJob.Cancel();explainJob.Dispose();explainJob=null;}contextButton.Enabled=true;}
         internal void ApplySkin(string id) {
             var s=Skin.Get(id);skinId=s.Id;shell.Background=Skin.Brush(s.Surface);shell.BorderBrush=Skin.Brush(s.Edge);
             outline.BorderBrush=Skin.Brush(s.Id=="glass"?"#A6BBD7":s.Id=="ocean"?"#82B6E8":"#D8BD57");
@@ -250,6 +424,7 @@ namespace EnglishCompanion {
             wordTitle.Foreground=meaning.Foreground=Skin.Brush(s.Ink);explanation.Foreground=Skin.Brush(s.Muted);pinShape.Stroke=Skin.Brush(s.Ink);
             foreach(var b in new[]{Speak,fold,copy,Manual,Retry,Settings,close,pin,wordAudio,contextButton,cardClose})b.Control.Foreground=Skin.Brush(s.Ink);
             fold.Control.Background=expanded?Skin.Brush(s.Hover):Brushes.Transparent;UpdatePin();
+            RestyleDocument();
             Resize(false);
         }
         internal IntPtr Handle {get {return new WindowInteropHelper(window).EnsureHandle();}}
@@ -257,13 +432,17 @@ namespace EnglishCompanion {
         internal void InspectableDemo() {window.ShowInTaskbar=true;var h=Handle;SetStyle(h,-20,new IntPtr((GetStyle(h,-20).ToInt64()&~0x80L)|0x40000L));}
         internal void Preview(string length="") {previewMode=true;InspectableDemo();Original.Text="好的，我现在再来测试一下。";
             string sample="This scrollable panel lets us read complete sentences, listen to their pronunciation, and explore how words work in everyday conversations.";
-            Translation.Text=length=="short"?"Let me try again.":length=="long"?String.Join(" ",System.Linq.Enumerable.Repeat(sample,12)):"Okay, let me try again now. Tomorrow we can take a little more time to explore the city, visit the museum, and meet our friends for dinner. Learning a language becomes easier when we use complete sentences in everyday conversations.";
-            Learnable=true;anchor=new Rectangle(700,650,2,20);hasAnchor=true;Place();window.ShowDialog();}
+            string a=length=="short"?"Let me try again.":length=="long"?String.Join(" ",System.Linq.Enumerable.Repeat(sample,12)):"Okay, let me try again now. Tomorrow we can take a little more time to explore the city, visit the museum, and meet our friends for dinner.";
+            string b=length=="long"?"Learning a language becomes easier when we use complete sentences in everyday conversations.":"Because it might rain this evening, we should take an umbrella with us today.";
+            var demo2=new PairResult {Source=Original.Text,Target=a+" "+b,Direction="English"};
+            demo2.Pairs.Add(new SentencePair {Id="s1",Source=Original.Text,Target=a});
+            demo2.Pairs.Add(new SentencePair {Id="s2",Source=length=="long"?"这样一句话就能撑开滚动区，也能看到长句的换行表现。":"因为晚上可能会下雨。",Target=b});
+            Translation.Text=demo2.Target;Learnable=true;anchor=new Rectangle(700,650,2,20);hasAnchor=true;Place();ShowPairs(demo2);window.ShowDialog();}
         internal void BeginInvoke(Action action) {window.Dispatcher.BeginInvoke(action);}
         internal void Hide() {CloseCard();window.Hide();}
         Point Placement(double height) {var src=HwndSource.FromHwnd(Handle);var m=src.CompositionTarget.TransformToDevice;var size=new System.Drawing.Size((int)(window.Width*m.M11),(int)(height*m.M22));var placed=Changes.Place(anchor,size,Forms.Screen.FromRectangle(anchor).WorkingArea);return new Point(placed.X/m.M11,placed.Y/m.M22);}
         void Place() {if(resizing)return;var p=Placement(window.Height);window.Left=p.X;window.Top=p.Y;UpdateFoldDirection();}
-        internal void Follow(Rectangle value) {if(!resizing&&(!Interacting||!window.IsVisible)){anchor=value;hasAnchor=true;Place();}if(!window.IsVisible)window.Show();}
+        internal void Follow(Rectangle value) {if(!resizing&&(!Interacting||!window.IsVisible)){anchor=value;hasAnchor=true;Place();}if(!window.IsVisible)window.Show();Settle();}
         public void Dispose() {if(disposed)return;disposed=true;CloseCard();pet.Dispose();copyFeedback.Stop();window.Close();}
     }
 }
