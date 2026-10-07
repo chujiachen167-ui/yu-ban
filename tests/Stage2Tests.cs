@@ -132,6 +132,61 @@ namespace EnglishCompanion {
             Equal(true, ProviderProfiles.TranslationReady(good), "a valid translation saves normally");
         }
 
+        // 状态区分：翻译中 / 朗读中 / 失败 / 取消，四种状态必须分得开且都能恢复。
+        static void PanelStateChecks() {
+            using (var panel = new Overlay(true)) {
+                var result = new PairResult { Source = "今天我想早点出门。", Target = "I want to leave early today." };
+                result.Pairs.Add(new SentencePair { Id = "s1", Source = "今天我想早点出门。", Target = "I want to leave early today." });
+                panel.Translation.Text = result.Target;
+                panel.ShowPairs(result); panel.Learnable = true;
+                panel.Follow(new System.Drawing.Rectangle(600, 600, 2, 20)); PumpLayout();
+
+                var retry = Field<OverlayButton>(panel, "Retry");
+                var busy = Field<System.Windows.Controls.Grid>(panel, "busy");
+
+                // 翻译中：等待点出现，重试按钮让位，但屏幕内容不被清空。
+                panel.SetTranslatingState(); PumpLayout();
+                Equal(PanelState.Translating, panel.State, "translating state is explicit");
+                Equal(System.Windows.Visibility.Visible, busy.Visibility, "translating shows a waiting indicator");
+                Equal(System.Windows.Visibility.Collapsed, retry.Control.Visibility, "retry button yields to the waiting indicator");
+                Equal("I want to leave early today.", panel.Translation.Text, "translation in progress keeps the previous result on screen");
+                var dot = Field<BusyIndicator>(panel, "busyDot");
+                Equal(true, dot != null && dot.IsVisible, "waiting indicator is present and visible");
+
+                // 翻译完成：等待点撤掉，重试按钮回来。
+                panel.SetTranslating(false); PumpLayout();
+                Equal(System.Windows.Visibility.Collapsed, busy.Visibility, "waiting indicator clears when done");
+                Equal(System.Windows.Visibility.Visible, retry.Control.Visibility, "retry button returns when done");
+                Equal("I want to leave early today.", panel.Translation.Text, "completed translation is still on screen");
+
+                // 失败：说明原因 + 保留重试入口 + 内容仍在。
+                panel.SetFailed("请求过于频繁或额度不足，请稍后重试", false); PumpLayout();
+                Equal(PanelState.Failed, panel.State, "failure is its own state, not idle");
+                Equal(true, retry.Control.IsEnabled, "failure keeps a retry entry");
+                Equal("I want to leave early today.", panel.Translation.Text, "failure never wipes the usable result");
+                var status = Field<System.Windows.Controls.TextBlock>(panel, "status");
+                Equal(true, status.Text.Contains("额度"), "failure states the reason");
+                Equal(System.Windows.Visibility.Visible, status.Visibility, "failure reason is visible");
+
+                // 取消：不弹错误，不当作失败。
+                panel.SetTranslatingState(); PumpLayout();
+                panel.SetFailed("", true); PumpLayout();
+                Equal(PanelState.Cancelled, panel.State, "cancel is distinct from failure");
+                Equal(false, retry.Control.IsEnabled, "cancel does not push a retry the user did not ask for");
+                Equal(System.Windows.Visibility.Collapsed, status.Visibility, "cancel shows no error text");
+                Equal("I want to leave early today.", panel.Translation.Text, "cancel still keeps the usable result");
+
+                // 朗读中：与翻译中的等待点形状不同，状态不混。
+                panel.SetTranslating(false);
+                panel.SetPlayback(PlaybackState.Preparing); PumpLayout();
+                Equal(PanelState.Cancelled, panel.State, "playback does not overwrite the panel state with translating");
+                panel.SetPlayback(PlaybackState.Playing); PumpLayout();
+                Equal(true, panel.Speak.Text == "停止", "playing shows a stop action");
+                panel.SetPlayback(PlaybackState.Idle); PumpLayout();
+                Equal("朗读", panel.Speak.Text, "idle restores the read-aloud label");
+            }
+        }
+
         static void Stage2Checks() { TranslationReadyChecks(); FailurePathChecks(); SplitSaveChecks(); }
     }
 }

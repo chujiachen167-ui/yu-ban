@@ -35,6 +35,8 @@ namespace EnglishCompanion {
         internal List<GroupRange> Ranges { get { return ranges; } }
         readonly TextBlock status;
         readonly OverlayButton fold,close,copy,pin,wordAudio,contextButton,cardClose;
+        readonly Grid busy = new Grid();
+        BusyIndicator busyDot;
         readonly System.Windows.Shapes.Path pinShape;
         internal readonly OverlayText Original,Translation;
         internal readonly OverlayButton Speak,Retry,Settings,Manual;
@@ -108,7 +110,10 @@ namespace EnglishCompanion {
             Manual=new OverlayButton("粘贴翻译","\uE77F");Manual.Control.Visibility=Visibility.Collapsed;
             DockPanel.SetDock(close.Control,Dock.Right);buttons.Children.Add(close.Control);
             DockPanel.SetDock(Settings.Control,Dock.Right);buttons.Children.Add(Settings.Control);
-            foreach(var b in new[]{Speak,Retry,copy,Manual})buttons.Children.Add(b.Control);
+            // 翻译进行中时，等待点占用重试按钮的位置，宽度一致，其它按钮不移动。
+            busy.Width=Retry.Control.Width;busy.Height=Retry.Control.Height;busy.Visibility=Visibility.Collapsed;
+            buttons.Children.Add(busy);buttons.Children.Add(Retry.Control);
+            foreach(var b in new[]{Speak,copy,Manual})buttons.Children.Add(b.Control);
             Speak.Enabled=Retry.Enabled=copy.Enabled=false;
             close.Click+=delegate {if(previewMode)window.Close();else Hide();if(Dismissed!=null)Dismissed();};
             copy.Click+=delegate {CopyAll();};copyFeedback.Tick+=delegate {copyFeedback.Stop();copy.Glyph="\uE8C8";copy.Name("复制译文");};
@@ -319,7 +324,29 @@ namespace EnglishCompanion {
         string speakBlocker="";
         internal bool Interacting {get {return window.IsMouseOver||card.IsMouseOver||dragging||editor.IsKeyboardFocusWithin;}}
         internal void Message(string text) {status.Text=text;status.Visibility=Visibility.Visible;Resize(false);}
+        // 失败与取消要能被一眼分开，同时保留上一次的有效结果和用户已经输入的文字。
+        internal void SetFailed(string reason,bool cancelled) {
+            State = cancelled ? PanelState.Cancelled : PanelState.Failed;
+            SetTranslating(false);
+            if (reason != null && reason.Length > 0) { status.Text = reason; status.Visibility = Visibility.Visible; }
+            // 失败与取消都保留重试入口：用户不必重打，也不用重填 Key。
+            Retry.Enabled = !cancelled;
+            Resize(false);
+        }
+        internal void SetTranslatingState() { State = PanelState.Translating; SetTranslating(true); }
         internal void SetPlayback(PlaybackState state,bool word=false) {Speak.SetPlayback(state);wordAudio.SetPlayback(word?state:PlaybackState.Idle);}
+        // 翻译进行中：在重试按钮的位置显示柔和的等待点，不加常驻说明文字。
+        internal void SetTranslating(bool value) {
+            if (value) {
+                if (busyDot == null) { busyDot = new BusyIndicator(); busy.Children.Add(busyDot); }
+                Retry.Control.Visibility = Visibility.Collapsed;
+                busy.Visibility = Visibility.Visible;
+            } else {
+                busy.Visibility = Visibility.Collapsed;
+                Retry.Control.Visibility = Visibility.Visible;
+            }
+        }
+        internal PanelState State { get; private set; }
         internal void SetExpanded(bool value) {expanded=value;CloseCard();fold.Name(value?"收起":"展开");fold.Control.Background=value?Skin.Brush(Skin.Get(skinId).Hover):Brushes.Transparent;Resize(true);}
         void UpdateFoldDirection() {
             bool growsUp=true;

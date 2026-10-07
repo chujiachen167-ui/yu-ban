@@ -32,4 +32,8 @@ if ($Test) {
     & (Join-Path $outDir 'CompanionTests.exe')
     if ($LASTEXITCODE -ne 0) { throw 'Tests failed' }
 }
+if ($args -contains '-Diag') {
+    & $compiler @compilerOptions /nologo /optimize+ /platform:x64 /target:exe /main:EnglishCompanion.InputDiagnostics ('/out:' + (Join-Path $outDir 'CompanionDiag.exe')) @references (Join-Path $base 'src\InputDiagnostics.cs')
+    if ($LASTEXITCODE -ne 0) { throw 'Diagnostic build failed' }
+}
 Get-Item (Join-Path $outDir 'EnglishCompanion.exe') | Select-Object Name, Length

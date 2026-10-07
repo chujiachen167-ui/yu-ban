@@ -12,6 +12,7 @@ namespace EnglishCompanion {
             if (Array.IndexOf(args, "--probe") >= 0) { Console.OutputEncoding = new UTF8Encoding(false); Probe.Run(); return 0; }
             Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false);
             if (args.Length == 2 && args[0] == "--export-icon") { using (var file = System.IO.File.Create(args[1])) AppIcon.Value.Save(file); return 0; }
+            if (Array.IndexOf(args, "--input-diag") >= 0) return InputDiagnostics.Run(args);
             if (Array.IndexOf(args, "--settings-preview") >= 0) { using (var preview = new SettingsWindow(new Configuration {Theme=PreviewSkin(args)}, true)) preview.ShowDialog(); return 0; }
             if (Array.IndexOf(args, "--fixture") >= 0) { Application.Run(new Fixture()); return 0; }
             if (Array.IndexOf(args, "--panel-preview") >= 0) { using(var overlay=new Overlay(true)){overlay.ApplySkin(PreviewSkin(args));overlay.ShowOriginal=Array.IndexOf(args,"--translation-only")<0;overlay.Preview(Array.IndexOf(args,"--short-text")>=0?"short":Array.IndexOf(args,"--long-text")>=0?"long":"");}return 0; }

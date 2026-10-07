@@ -137,7 +137,9 @@ namespace EnglishCompanion {
             if (translationJob != null) { translationJob.Cancel(); translationJob.Dispose(); }
             translationJob = new CancellationTokenSource(); var token = translationJob.Token;
             StopVoice(); source = text; translated = ""; audio = null; audioText = "";
-            overlay.ClearPairs();overlay.Original.Text = text; overlay.Translation.Text = "正在翻译整句…";
+            overlay.ClearPairs();overlay.Original.Text = text;
+            // 翻译中：等待点出现，但上一次的有效结果不清空。
+            overlay.SetTranslatingState(); overlay.Translation.Text = "正在翻译整句…";
             overlay.Speak.Enabled = false; overlay.Retry.Enabled = true;
             try {
                 PairResult result;
@@ -149,13 +151,22 @@ namespace EnglishCompanion {
                 // 逐句对照与整段排版用同一份结果；整段按钮与朗读只取完整译文。
                 translated = result.Target; overlay.Translation.Text = translated;
                 overlay.ShowPairs(result);
+                overlay.SetTranslating(false);
                 overlay.Learnable=true;
                 // 朗读能不能用只看语音这一侧；语音没配好时翻译照常，朗读按钮单独说明。
                 string blocker = demo ? "" : ProviderProfiles.SpeechBlocker(config);
                 overlay.Speak.Enabled = !demo && blocker.Length == 0;
                 overlay.SpeakBlocker = blocker;
-            } catch (OperationCanceledException) { }
-            catch (Exception e) { if (current == generation && !disposed) { overlay.ClearPairs(); overlay.Translation.Text = e is InvalidOperationException ? e.Message : "处理失败，请检查设置后重试"; } }
+            } catch (OperationCanceledException) {
+                // 取消是正常路径：保留原文与上一次结果，不弹错误，不自动重试。
+                if (current == generation && !disposed) overlay.SetFailed("", true);
+            }
+            catch (Exception e) {
+                // 失败：保留原文与可重试入口，不要求重打，也不要求重填 Key。
+                if (current == generation && !disposed) {
+                    overlay.SetFailed(e is InvalidOperationException ? e.Message : "处理失败，请检查设置后重试", false);
+                }
+            }
         }
         // 离线演示不联网，用固定对照展示排版与交互。
         static PairResult Demo(string text) {
@@ -182,8 +193,14 @@ namespace EnglishCompanion {
                 if (current != voiceGeneration || disposed) return;
                 overlay.SetPlayback(PlaybackState.Playing,selectedWord!=null);
                 await voice.Play(new VoiceRequest { Local=config.LocalVoice, Text=text, Language=config.Language, Audio=config.LocalVoice?null:Convert.ToBase64String(audio) },token);
-            } catch (OperationCanceledException) { }
-            catch (Exception e) { if (current == voiceGeneration && !disposed) { StopVoice(); overlay.Message(e is InvalidOperationException ? e.Message : "朗读暂不可用，请重试"); } }
+            } catch (OperationCanceledException) {
+                // 用户主动停止朗读：安静回到空闲，不当作错误，也不留红色提示。
+                if (current == voiceGeneration && !disposed) { StopVoice(); overlay.SetFailed("", true); }
+            }
+            catch (Exception e) {
+                // 朗读失败：译文仍在屏幕上，可以直接再点一次，不影响复制与拖选。
+                if (current == voiceGeneration && !disposed) { StopVoice(); overlay.SetFailed(e is InvalidOperationException ? e.Message : "朗读暂不可用，请重试", false); }
+            }
             finally { if(current==voiceGeneration && !disposed) StopVoice(); }
         }
         void StopVoice() {

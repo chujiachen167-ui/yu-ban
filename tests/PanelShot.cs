@@ -59,6 +59,23 @@ namespace EnglishCompanion {
                 joined.Target = "He came, but he did not say anything.";
                 panel.Translation.Text = joined.Target; panel.ShowPairs(joined); Pump(600);
                 Shot(window, Path.Combine(directory, "panel-glass-connector.png"), 0);
+
+                // 四种状态：翻译中 / 失败 / 朗读中
+                var state = new PairResult { Source = "明天要去见客户，还得带上合同。", Direction = "English" };
+                state.Pairs.Add(new SentencePair { Id = "s1", Source = "明天要去见客户，", Target = "I need to meet a client tomorrow," });
+                state.Pairs.Add(new SentencePair { Id = "s2", Source = "还得带上合同。", Target = "and I also have to bring the contract." });
+                state.Target = "I need to meet a client tomorrow, and I also have to bring the contract.";
+                panel.Translation.Text = state.Target; panel.ShowPairs(state); panel.Learnable = true;
+                panel.Retry.Enabled = true; Pump(300);
+                panel.SetTranslatingState(); Pump(500);
+                Shot(window, Path.Combine(directory, "state-translating.png"), 0);
+                panel.SetTranslating(false);
+                panel.SetFailed("请求过于频繁或额度不足，请稍后重试", false); Pump(400);
+                Shot(window, Path.Combine(directory, "state-failed.png"), 0);
+                panel.SetFailed("", false);
+                panel.SetPlayback(PlaybackState.Preparing); Pump(400);
+                Shot(window, Path.Combine(directory, "state-speaking.png"), 0);
+                panel.SetPlayback(PlaybackState.Idle);
                 window.Close();
             }
             Console.WriteLine("Panel screenshots written to " + directory);

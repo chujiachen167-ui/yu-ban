@@ -501,7 +501,7 @@ namespace EnglishCompanion {
                     using(var overlay=new Overlay(true)) { Equal(false,overlay.Handle==IntPtr.Zero,"overlay initializes before first show"); overlay.Follow(new Rectangle(100,400,2,20)); Equal(true,overlay.Visible,"overlay displays through real HWND"); }
                 }
                 if(Array.IndexOf(args,"--panel-shot")>=0) return PanelShot.Capture(args[Array.IndexOf(args,"--panel-shot")+1]);
-                if(Array.IndexOf(args,"--panel-check")>=0) { PanelLayoutChecks(); PairPanelChecks(); }
+                if(Array.IndexOf(args,"--panel-check")>=0) { PanelLayoutChecks(); PairPanelChecks(); Stage2Checks(); }
                 if(Array.IndexOf(args,"--liquid-check")>=0) LiquidChecks();
                 if(Array.IndexOf(args,"--skin-check")>=0) SkinChecks();
                 if(Array.IndexOf(args,"--pet-check")>=0) PetChecks();
