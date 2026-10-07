@@ -91,9 +91,22 @@ namespace EnglishCompanion {
             }
             if (s.Text.Length > 6000) { s.Text = ""; s.Editable = false; s.Reason = "内容较长，请选中本句后按 Ctrl+Shift+F8"; }
             if (s.Selection.Length > 1800) { s.Selection = ""; s.Reason = "一次请选中不超过 1800 字"; }
-            if (!s.Editable && s.Reason == "") s.Reason = "这个输入框暂时无法自动读取。可点击下方“粘贴翻译”，本提示会保留。";
+            if (!s.Editable && s.Reason == "") {
+                // 自绘控件（微信、QQ 等）不向系统暴露可读接口，这里如实说明而不是笼统说“暂时无法读取”。
+                s.Reason = SelfDrawn(process)
+                    ? "这个应用的输入框不向 Windows 开放读取接口，所以读不到你打的字。点“粘贴翻译”一样能用：复制内容后在浮窗里粘贴即可。"
+                    : "这个输入框暂时无法自动读取。可点击下方“粘贴翻译”，本提示会保留。";
+            }
             if (Native.GetForegroundWindow() != foreground) return new Snapshot();
             return s;
+        }
+        // 这类应用自己绘制输入框，不注册 UIA 控件；换输入法或换应用即可恢复自动读取。
+        static readonly string[] SelfDrawnApps = { "weixin", "wechat", "weixinapp", "qq", "tim", "qqnt" };
+        internal static bool SelfDrawn(string process) {
+            if (String.IsNullOrEmpty(process)) return false;
+            process = process.ToLowerInvariant();
+            foreach (var name in SelfDrawnApps) if (process.Contains(name)) return true;
+            return false;
         }
     }
     internal sealed class ProbeClient : IDisposable {

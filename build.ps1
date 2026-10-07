@@ -35,5 +35,7 @@ if ($Test) {
 if ($args -contains '-Diag') {
     & $compiler @compilerOptions /nologo /optimize+ /platform:x64 /target:exe /main:EnglishCompanion.InputDiagnostics ('/out:' + (Join-Path $outDir 'CompanionDiag.exe')) @references (Join-Path $base 'src\InputDiagnostics.cs')
     if ($LASTEXITCODE -ne 0) { throw 'Diagnostic build failed' }
+    & $compiler @compilerOptions /nologo /optimize+ /platform:x64 /target:exe /main:EnglishCompanion.TrayDiagnostics ('/out:' + (Join-Path $outDir 'CompanionTrayDiag.exe')) @references (Join-Path $base 'src\TrayDiagnostics.cs') (Join-Path $base 'src\AppIcon.cs')
+    if ($LASTEXITCODE -ne 0) { throw 'Tray diagnostic build failed' }
 }
 Get-Item (Join-Path $outDir 'EnglishCompanion.exe') | Select-Object Name, Length

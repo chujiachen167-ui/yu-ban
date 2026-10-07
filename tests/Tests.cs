@@ -367,8 +367,18 @@ namespace EnglishCompanion {
                     if (Array.IndexOf(args, "--resave") >= 0) { saved.Save(); Console.WriteLine("ConfigSaved=True"); }
                     return 0;
                 }
-                Equal("我明天想去看电影。", Changes.Added("", "我明天想去看电影。"), "empty input");
-                Equal("新增句子。", Changes.Added("已有内容。", "已有内容。新增句子。"), "only append");
+                // 自绘输入框要能被识别，并给出可行动的解释，而不是笼统的“暂时无法读取”。
+                Equal(true,Probe.SelfDrawn("Weixin"),"WeChat is recognized as a self-drawn input");
+                Equal(true,Probe.SelfDrawn("wechat"),"WeChat legacy name recognized");
+                Equal(true,Probe.SelfDrawn("QQ"),"QQ recognized");
+                Equal(true,Probe.SelfDrawn("QQNT"),"QQNT recognized");
+                Equal(true,Probe.SelfDrawn("TIM"),"TIM recognized");
+                Equal(false,Probe.SelfDrawn("Telegram"),"Telegram is a normal readable input");
+                Equal(false,Probe.SelfDrawn("Discord"),"Discord is a normal readable input");
+                Equal(false,Probe.SelfDrawn("notepad"),"Notepad is a normal readable input");
+                Equal(false,Probe.SelfDrawn(""),"empty process name is not self-drawn");
+
+                Equal("我明天想去看电影。", Changes.Added("", "我明天想去看电影。"), "empty input");                Equal("新增句子。", Changes.Added("已有内容。", "已有内容。新增句子。"), "only append");
                 Equal("明", Changes.Added("我今天去。", "我明天去。"), "minimal replacement fallback");
                 Equal("明天", Changes.AddedAt("我今天去。", "我明天去。", 1, 3), "selection replacement preserves common suffix");
                 Equal("哈哈", Changes.AddedAt("哈哈。", "哈哈哈哈。", 0, 0), "repeated insertion anchored at caret");
