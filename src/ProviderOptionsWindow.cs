@@ -17,14 +17,20 @@ namespace EnglishCompanion {
             var actions=new StackPanel {Orientation=Orientation.Horizontal,HorizontalAlignment=HorizontalAlignment.Right};
             var defaults=new Button {Content="恢复预设",Padding=new Thickness(14,8,14,8),Margin=new Thickness(0,0,12,0),IsEnabled=ProviderProfiles.Find(provider,speech)!=null};
             defaults.Click+=delegate {var p=ProviderProfiles.Find(provider,speech);endpoint.Text=p.Url;model.Text=p.Model;voice.Text=p.Voice;};
-            // 语音侧给出已验证的模型快捷入口：用户不必手写模型名就能试到别的音色与读法能力。
+            // 语音侧给出已验证的模型快捷入口：不用手写模型名。
+            // 但一把 Key 只能配一种接口，工作空间 Key 不能切到普通 TTS，这里直接说明。
             if(speech&&provider=="千问") {
+                bool workspaceKey=ProfileKeyIsWorkspace(c,provider);
                 var quick=new StackPanel {Orientation=Orientation.Horizontal,HorizontalAlignment=HorizontalAlignment.Right,Margin=new Thickness(0,0,12,0)};
                 quick.Children.Add(new TextBlock {Text="切换到",VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(0,0,8,0),Foreground=Skin.Brush(skin.Muted)});
                 foreach(var pair in new[]{new[]{"Audio 3.1（英式＋读法）","qwen-audio-3.1-tts-flash"},new[]{"TTS Flash（童声）","qwen3-tts-flash"}}) {
                     var b=new Button {Content=pair[0],Padding=new Thickness(10,8,10,8),Margin=new Thickness(0,0,8,0),ToolTip=pair[1]};
                     string id=pair[1];
+                    bool blocked=workspaceKey&&id=="qwen3-tts-flash";
+                    b.IsEnabled=!blocked;
+                    b.ToolTip=blocked?"当前这把是工作空间 Key，不能用于童声；童声需要另一把普通 API Key":id;
                     b.Click+=delegate {
+                        if(blocked)return;
                         model.Text=id;endpoint.Text="https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation";
                         voice.Text=id=="qwen3-tts-flash"?"Cherry":"Betty_v3.1";
                     };
@@ -38,6 +44,12 @@ namespace EnglishCompanion {
                 catch(InvalidOperationException e){status.Text=e.Message;}
             };
             actions.Children.Add(defaults);actions.Children.Add(confirm);layout.Children.Add(actions);window.Content=layout;
+        }
+        // 工作空间 Key 只能走 Qwen Audio，不能切到普通 TTS；据此决定快捷入口是否可用。
+        static bool ProfileKeyIsWorkspace(Configuration c,string provider) {
+            var key=ProviderProfiles.Saved(c.SpeechKeys,provider);
+            if(key.Length==0)key=Configuration.Open(c.SpeechSecret);
+            return key.Trim().StartsWith("sk-ws-",StringComparison.Ordinal);
         }
         static void Field(Panel parent,string label,TextBox box,string value){parent.Children.Add(new TextBlock {Text=label,Margin=new Thickness(0,0,0,6)});box.Text=value??"";box.Padding=new Thickness(10,8,10,8);box.Margin=new Thickness(0,0,0,14);AutomationProperties.SetName(box,label);parent.Children.Add(box);}
         internal void Show(){window.ShowDialog();}

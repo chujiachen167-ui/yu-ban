@@ -292,6 +292,28 @@ namespace EnglishCompanion {
             ProviderProfiles.Prepare(unknown, "ElevenLabs", true);
             Equal(false, SpeechProfiles.CapabilityOf(unknown).Styles, "a provider without a documented catalog gets no styles");
         }
+        // 一把 Key 只能配一种接口：这条规则必须成立，否则用户会撞上互相打架的报错。
+        static void KeyRoutingChecks() {
+            var workspace = new Configuration { Language = "English" };
+            ProviderProfiles.Prepare(workspace, "千问", true);
+            workspace.SpeechProfiles["千问"] = new ModelProfile { Url = "https://ws-x.cn-beijing.maas.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer", Model = "qwen-audio-3.1-tts-flash", Voice = "Betty_v3.1" };
+            // 工作空间 Key：必须有工作空间地址，普通 TTS 不可用。
+            Equal(true, QwenWorkspace.Required(ProviderProfiles.Profile(workspace, "千问", true), "sk-ws-abc"), "a workspace key requires a workspace");
+            Equal(false, QwenWorkspace.Required(new ModelProfile { Url = "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation", Model = "qwen3-tts-flash", Voice = "Cherry" }, "sk-plain"), "a plain key needs no workspace");
+            // 同一把工作空间 Key 不可能被判成普通 TTS 可用。
+            var plain = new ModelProfile { Url = "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation", Model = "qwen3-tts-flash", Voice = "Cherry" };
+            Equal(true, QwenWorkspace.Required(plain, "sk-ws-abc"), "a workspace key never works on the plain TTS endpoint");
+            // 两条路各自的地址互不相同，程序要靠地址而不是模型名来区分。
+            Equal(false, QwenWorkspace.Ready(plain), "the plain endpoint is never a workspace");
+            Equal(true, QwenWorkspace.Ready(ProviderProfiles.Profile(workspace, "千问", true)), "the workspace endpoint is ready");
+            // 服务商校验：普通 TTS 地址不该被要求工作空间。
+            bool rejected = false;
+            try { Services.ValidateSpeech(new Configuration { SpeechUrl = plain.Url, SpeechModel = "qwen3-tts-flash" }, "sk-ws-abc"); }
+            catch (InvalidOperationException) { rejected = true; }
+            Equal(true, rejected, "a workspace key is stopped before it reaches the plain endpoint");
+            // 反过来：普通 Key 走普通地址不报错。
+            Services.ValidateSpeech(new Configuration { SpeechUrl = plain.Url, SpeechModel = "qwen3-tts-flash" }, "sk-plain");
+        }
         static void LiquidChecks() {            var canvas=new System.Windows.Controls.Canvas();
             var window=new System.Windows.Window {Title="语伴 · 动效检查",Width=820,Height=590,Content=canvas,ShowInTaskbar=false};
             var material=new GlassMist(window,canvas);material.SetEnabled(true);window.Show();PumpLayout();
@@ -641,6 +663,7 @@ namespace EnglishCompanion {
                 VoiceCatalogChecks();
                 ReadingStyleChecks();
                 CapabilityChecks();
+                KeyRoutingChecks();
                 if(Array.IndexOf(args,"--desktop-check")>=0) using(var tray=new TrayIcon(new System.Windows.Forms.ContextMenuStrip(),delegate {},true)) {
                     Equal(true,tray.Registered,"Windows accepts tray registration");
                     Equal(true,tray.HasRectangle(),"Windows exposes tray icon rectangle");

@@ -32,14 +32,20 @@ namespace EnglishCompanion {
                 body.Children.Add(new TextBlock { Text=content, TextWrapping=TextWrapping.Wrap, FontSize=13, LineHeight=21, Foreground=Skin.Brush("#516771"), Margin=new Thickness(0,0,0,10) });
                 if(name=="千问"&&speech) {
                     var current=profile==null?null:profile();bool required=QwenWorkspace.Required(current,key==null?"":key());
-                    string setup=current!=null&&QwenWorkspace.Ready(current)?"✓ 工作空间已配置，换程序位置不用重新填写。":required?"这份语音配置需要工作空间 ID；点击下面“配置千问语音”填写即可。":"普通 Qwen3-TTS 通常无需填写工作空间 ID；选择 Qwen Audio 或使用 sk-ws- 开头的 Key 时需要。";
+                    // 链接要指到具体页面，不要把人丢进首页让他自己找。
+                    string setup=current!=null&&QwenWorkspace.Ready(current)?"✓ 工作空间已配置，换程序位置不用重新填写。":required?"这份语音配置需要工作空间 ID；点最上面的「配置千问语音」填一下就行。":"你填的是普通 API Key，不需要工作空间，可以直接用。";
                     body.Children.Add(new TextBlock {Text=setup,TextWrapping=TextWrapping.Wrap,FontSize=13,FontWeight=FontWeights.SemiBold,Foreground=Skin.Brush("#243B46"),Margin=new Thickness(0,0,0,10)});
-                    body.Children.Add(new TextBlock {Text="工作空间 ID 怎么找\n1. 打开百炼控制台，选择 Key 所属地域。\n2. 打开右上角的业务空间信息，复制 Workspace ID；管理员也可在业务空间管理的 ID 列复制。\n3. 在语伴填写 ID，接口地址由程序生成。\n\nID 不是 API Key，也不是 APP ID。赠送额度对应的模型名称和音色，可在“模型与音色”调整。",TextWrapping=TextWrapping.Wrap,FontSize=13,LineHeight=21,Foreground=Skin.Brush("#516771"),Margin=new Thickness(0,0,0,10)});
-                    Link(body,"打开百炼控制台",QwenWorkspace.Console);Link(body,"工作空间 ID 获取指引",QwenWorkspace.Guide);Link(body,"Qwen Audio 接口说明",QwenWorkspace.AudioGuide);
+                    // 只有在真的需要工作空间时才讲工作空间怎么找，否则只是增加噪音。
+                    if(required) {
+                        body.Children.Add(new TextBlock {Text="工作空间 ID 怎么找（3 步）\n1. 点下面「工作空间 ID 获取指引」，页面会直接跳到对应章节。\n2. 在百炼控制台右上角「业务空间信息」里复制 Workspace ID。\n3. 回到语伴粘贴，接口地址由程序自动生成。\n\n注意：ID 不是 API Key，也不是 APP ID，通常以 ws- 开头。",TextWrapping=TextWrapping.Wrap,FontSize=13,LineHeight=21,Foreground=Skin.Brush("#516771"),Margin=new Thickness(0,0,0,10)});
+                    } else {
+                        body.Children.Add(new TextBlock {Text="想用童声（小女孩／小男孩）？\n用同一把普通 API Key 即可，在「模型与接口」里切到 TTS Flash。\n童声和英式＋读法分属两个模型，不能同时用。",TextWrapping=TextWrapping.Wrap,FontSize=13,LineHeight=21,Foreground=Skin.Brush("#516771"),Margin=new Thickness(0,0,0,10)});
+                    }
+                    if(required)Link(body,"工作空间 ID 获取指引（直达）",QwenWorkspace.Guide);
+                    Link(body,"新建 API Key（直达，不经过首页）",ProviderHelp.QwenKey);
                 }
                 if(entry!=null){Link(body,"官方平台 / 获取密钥",entry.Portal);Link(body,"接口文档",entry.Docs);}
-                if(name=="千问")Link(body,"余额 / 充值",QwenBilling);
-                body.Children.Add(new TextBlock { Text="API Key 是服务访问凭据，请保留在自己的设备上。", TextWrapping=TextWrapping.Wrap, FontSize=11, Foreground=Skin.Brush("#7B8990"), Margin=new Thickness(0,9,0,0) });
+                if(name=="千问")Link(body,"余额 / 充值",QwenBilling);                body.Children.Add(new TextBlock { Text="API Key 是服务访问凭据，请保留在自己的设备上。", TextWrapping=TextWrapping.Wrap, FontSize=11, Foreground=Skin.Brush("#7B8990"), Margin=new Thickness(0,9,0,0) });
                 popup.IsOpen=true;
             };
             trigger.MouseEnter+=delegate { open(); }; trigger.Click+=delegate { open(); }; trigger.MouseLeave+=delegate { delay.Start(); };

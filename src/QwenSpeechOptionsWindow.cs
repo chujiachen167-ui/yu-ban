@@ -13,8 +13,19 @@ namespace EnglishCompanion {
             window=new Window {Title="千问 · 语音配置",Owner=owner,Width=570,SizeToContent=SizeToContent.Height,MaxHeight=Math.Min(760,SystemParameters.WorkArea.Height-48),ResizeMode=ResizeMode.NoResize,WindowStartupLocation=WindowStartupLocation.CenterOwner,FontFamily=owner.FontFamily,FontSize=14,Foreground=Skin.Brush(skin.Ink),Background=Skin.Brush(skin.Surface),ShowInTaskbar=false};
             var layout=new StackPanel {Margin=new Thickness(24)};
             layout.Children.Add(new TextBlock {Text="千问语音配置",FontSize=21,FontWeight=FontWeights.SemiBold,Margin=new Thickness(0,0,0,18)});
-            kind.Items.Add("普通千问 TTS");kind.Items.Add("Qwen Audio · 工作空间");kind.SelectedIndex=QwenWorkspace.Required(profile,key)?1:0;
+            // 一把 Key 只能配一种接口，但用户不该在这里被拦住：先按 Key 选好，再明确告诉他另一条路怎么走。
+            bool workspaceKey=(key??"").Trim().StartsWith("sk-ws-",StringComparison.Ordinal);
+            kind.Items.Add("普通千问 TTS");kind.Items.Add("Qwen Audio · 工作空间");
+            kind.SelectedIndex=workspaceKey||QwenWorkspace.Required(profile,key)?1:0;
             Field(layout,"接口类型",kind);kind.Padding=new Thickness(10,7,10,7);AutomationProperties.SetName(kind,"千问接口类型");
+            var keyNotice=new TextBlock {TextWrapping=TextWrapping.Wrap,FontSize=12,Margin=new Thickness(0,0,0,12),Foreground=Skin.Brush("#2965B5")};
+            layout.Children.Add(keyNotice);
+            string ChildHint="童声（小女孩／小男孩）在「普通千问 TTS」里，但需要另一把普通 API Key（sk- 开头），工作空间 Key 用不了。";
+            Action notice=delegate {
+                if(kind.SelectedIndex==1)keyNotice.Text="工作空间 Key 只能走这一条路。\n"+ChildHint;
+                else keyNotice.Text="这一条需要普通 API Key（sk- 开头）。\n"+ChildHint;
+            };
+            notice();
             var workspaceFields=new StackPanel();layout.Children.Add(workspaceFields);
             Field(workspaceFields,"工作空间 ID",workspace);workspace.Text=QwenWorkspace.Id(profile);
             region.Items.Add("北京");region.Items.Add("新加坡");region.SelectedIndex=QwenWorkspace.Region(profile)=="ap-southeast-1"?1:0;
@@ -31,12 +42,13 @@ namespace EnglishCompanion {
                 if(!audio&&(model.Text??"").StartsWith("qwen-audio-",StringComparison.OrdinalIgnoreCase)){var defaults=ProviderProfiles.Find("千问",true);model.Text=defaults.Model;voice.Text=defaults.Voice;endpoint.Text=defaults.Url;}
                 if(audio)endpoint.Text="https://"+(String.IsNullOrWhiteSpace(workspace.Text)?"{WorkspaceId}":workspace.Text.Trim())+"."+(region.SelectedIndex==1?"ap-southeast-1":"cn-beijing")+".maas.aliyuncs.com"+QwenWorkspace.Path;
             };
-            kind.SelectionChanged+=delegate {update();};region.SelectionChanged+=delegate {update();};workspace.TextChanged+=delegate {update();};update();
+            kind.SelectionChanged+=delegate {update();notice();};region.SelectionChanged+=delegate {update();};workspace.TextChanged+=delegate {update();};update();
             var status=new TextBlock {Foreground=Skin.Brush("#BA3245"),TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,10)};layout.Children.Add(status);
             var confirm=new Button {Content="确认",Padding=new Thickness(24,8,24,8),HorizontalAlignment=HorizontalAlignment.Right,IsDefault=true};
             confirm.Click+=delegate {
                 try {
-                    if(kind.SelectedIndex==0&&(key??"").Trim().StartsWith("sk-ws-",StringComparison.Ordinal))throw new InvalidOperationException("这把 Key 属于工作空间，请选择 Qwen Audio · 工作空间。");
+                    if(kind.SelectedIndex==0&&(key??"").Trim().StartsWith("sk-ws-",StringComparison.Ordinal))
+                        throw new InvalidOperationException("这把是工作空间 Key（sk-ws- 开头），只能用于「Qwen Audio · 工作空间」。\n要用童声，请另建一把普通 API Key（sk- 开头）填到主设置的语音 Key。\n现在想继续用这把 Key，直接把上面切回 Qwen Audio 即可。");
                     var updated=kind.SelectedIndex==1?QwenWorkspace.Create(workspace.Text,region.SelectedIndex==1?"ap-southeast-1":"cn-beijing",model.Text,voice.Text):new ModelProfile {Url=endpoint.Text.Trim(),Model=model.Text.Trim(),Voice=voice.Text.Trim()};
                     ProviderProfiles.ValidateProfile("千问",true,updated);
                     Services.ValidateSpeech(new Configuration {SpeechUrl=updated.Url,SpeechModel=updated.Model},key??"");
