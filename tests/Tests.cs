@@ -216,6 +216,49 @@ namespace EnglishCompanion {
             Equal(9, sf.Count, "SiliconFlow lists its eight documented voices plus the original");
             Equal(false, SpeechProfiles.Supported(silicon), "a provider without a documented catalog gets no preference entry");
         }
+        // 三种读法必须真的改变请求，否则就是三个空选项。
+        static void ReadingStyleChecks() {
+            var v31 = new Configuration { Language = "English", SpeechUrl = "https://ws-x.cn-beijing.maas.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer" };
+            ProviderProfiles.Prepare(v31, "千问", true);
+            v31.SpeechModel = "qwen-audio-3.1-tts-flash";
+            v31.Voice = "Betty_v3.1";
+
+            Func<string,string> Body = delegate(string style) {
+                var draft = Probe.Json.Deserialize<Configuration>(Probe.Json.Serialize(v31));
+                draft.SpeechStyle = style;
+                return Probe.Json.Serialize(Services.SpeechBody(draft, "Hello there."));
+            };
+            var original = Body("original");
+            var natural = Body("natural");
+            var clear = Body("clear");
+            // 现状：不额外干预，模型按自己的默认方式读。
+            Equal(false, original.Contains("instruction"), "the baseline reading style sends no extra instruction");
+            // 自然会话与清晰伴读必须给出不同指令，否则两个选项毫无区别。
+            Equal(true, natural.Contains("instruction"), "natural reading sends an instruction");
+            Equal(true, clear.Contains("instruction"), "clear reading sends an instruction");
+            Equal(false, natural == clear, "the two reading styles are genuinely different requests");
+            // 清晰伴读会把语速放慢到 0.92；自然会话保持 1.0。
+            Equal(true, clear.Contains("\"rate\":0.92"), "clear reading slows down slightly");
+            Equal(true, natural.Contains("\"rate\":1"), "natural reading keeps the default rate");
+
+            // 音色选择必须进入请求，朗读才真的换了人。
+            var c1 = Probe.Json.Deserialize<Configuration>(Probe.Json.Serialize(v31)); c1.EnglishVoice = "Emily_v3.1";
+            var c2 = Probe.Json.Deserialize<Configuration>(Probe.Json.Serialize(v31)); c2.EnglishVoice = "Eric_v3.1";
+            Equal(true, Probe.Json.Serialize(Services.SpeechBody(c1, "Hi.")).Contains("Emily_v3.1"), "the chosen voice reaches the request");
+            Equal(true, Probe.Json.Serialize(Services.SpeechBody(c2, "Hi.")).Contains("Eric_v3.1"), "another voice reaches the request");
+
+            // qwen3-tts-flash 不接受 instruction：三种读法在那里是同一个请求，如实记录。
+            var v3 = Probe.Json.Deserialize<Configuration>(Probe.Json.Serialize(v31));
+            v3.SpeechModel = "qwen3-tts-flash";
+            string a = "", b = "";
+            foreach (var style in new[] { "original", "natural", "clear" }) {
+                v3.SpeechStyle = style;
+                string body = Probe.Json.Serialize(Services.SpeechBody(v3, "Hi."));
+                if (style == "natural") a = body; if (style == "clear") b = body;
+            }
+            Equal(true, a == b, "qwen3-tts-flash takes no style parameter, so the styles are identical there");
+            Equal(false, a.Contains("instruction"), "no unsupported parameter is sent to qwen3-tts-flash");
+        }
         static void LiquidChecks() {            var canvas=new System.Windows.Controls.Canvas();
             var window=new System.Windows.Window {Title="语伴 · 动效检查",Width=820,Height=590,Content=canvas,ShowInTaskbar=false};
             var material=new GlassMist(window,canvas);material.SetEnabled(true);window.Show();PumpLayout();
@@ -542,8 +585,7 @@ namespace EnglishCompanion {
                     Equal(true, child.WaitForExit(2000), "helper clean exit");
                     Equal(0, child.ExitCode, "helper success");
                 }
-                Equal("glass",Skin.Get("unknown").Id,"unknown theme fallback");
-                Equal("ocean",Probe.Json.Deserialize<Configuration>(Probe.Json.Serialize(new Configuration {Theme="ocean"})).Theme,"theme roundtrip");
+                Equal("glass",Skin.Get("unknown").Id,"unknown theme fallback");                Equal("ocean",Probe.Json.Deserialize<Configuration>(Probe.Json.Serialize(new Configuration {Theme="ocean"})).Theme,"theme roundtrip");
                 Equal(0.1,WaveAudio.Validate(SampleWave(100)),"valid PCM duration");
                 var streamed=SampleWave(100); Buffer.BlockCopy(BitConverter.GetBytes(0x7fffffbf),0,streamed,4,4); Buffer.BlockCopy(BitConverter.GetBytes(0x7fffff9b),0,streamed,40,4);
                 Equal(0.1,WaveAudio.Validate(WaveAudio.Normalize(streamed)),"real Qwen streaming header normalized");
@@ -564,6 +606,7 @@ namespace EnglishCompanion {
                 SentencePairChecks();
                 Stage2Checks();
                 VoiceCatalogChecks();
+                ReadingStyleChecks();
                 if(Array.IndexOf(args,"--desktop-check")>=0) using(var tray=new TrayIcon(new System.Windows.Forms.ContextMenuStrip(),delegate {},true)) {
                     Equal(true,tray.Registered,"Windows accepts tray registration");
                     Equal(true,tray.HasRectangle(),"Windows exposes tray icon rectangle");
