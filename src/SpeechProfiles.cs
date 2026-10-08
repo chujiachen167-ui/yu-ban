@@ -78,6 +78,38 @@ namespace EnglishCompanion {
             yield return new VoiceOption(c.Voice, string.IsNullOrEmpty(c.Voice) ? "平台默认音色" : c.Voice, "该平台未提供公开音色目录");
         }
         // 朗读偏好只在真正支持的平台上开放，不把一家能力说成所有家都支持。
+        // 当前这台平台与模型到底支持什么。不支持的部分要说清楚原因，而不是让人调了没反应。
+        internal sealed class Capability {
+            internal bool Styles, Voices, ChildVoices, BritishVoices;
+            internal string Reason = "";
+        }
+        internal static Capability CapabilityOf(Configuration c) {
+            var cap = new Capability();
+            string provider = ProviderProfiles.SpeechProvider(c);
+            if (c.LocalVoice) { cap.Reason = "系统语音由 Windows 提供，没有可选音色与读法"; return cap; }
+            if (c.Language != "English") { cap.Reason = "当前只对英语朗读提供音色与读法"; return cap; }
+            if (provider == "千问") {
+                if (c.SpeechModel == "qwen-audio-3.1-tts-flash") {
+                    cap.Styles = cap.Voices = cap.BritishVoices = true; return cap;
+                }
+                if (c.SpeechModel == "qwen3-tts-flash") {
+                    // 这个模型只接受 voice，不接 instruction，所以有音色（含童声）但没有读法。
+                    cap.Voices = cap.ChildVoices = true;
+                    cap.Reason = "当前模型提供音色与童声，但不接受读法指令；需要「现状／自然会话／清晰伴读」请改用 Audio 3.1 模型";
+                    return cap;
+                }
+                cap.Reason = "当前千问模型不在已验证列表中";
+                return cap;
+            }
+            if (provider == "OpenAI" && c.SpeechModel == "gpt-4o-mini-tts") {
+                cap.Styles = cap.Voices = true;
+                cap.Reason = "OpenAI 通过文字指令控制口音与情绪，没有单独的音色目录说明";
+                return cap;
+            }
+            if (provider == "硅基流动") { cap.Voices = true; cap.Reason = "该平台未公布口音信息，音色按名称列出"; return cap; }
+            cap.Reason = provider + " 未提供公开音色目录";
+            return cap;
+        }
         internal static bool Supported(Configuration c) {
             if(c.LocalVoice||c.Language!="English")return false;
             string provider=ProviderProfiles.SpeechProvider(c);

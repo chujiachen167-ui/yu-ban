@@ -259,6 +259,39 @@ namespace EnglishCompanion {
             Equal(true, a == b, "qwen3-tts-flash takes no style parameter, so the styles are identical there");
             Equal(false, a.Contains("instruction"), "no unsupported parameter is sent to qwen3-tts-flash");
         }
+        // 能力提示：不支持的能力必须说清楚原因，不能让人调了才发现没反应。
+        static void CapabilityChecks() {
+            var audio = new Configuration { Language = "English" };
+            ProviderProfiles.Prepare(audio, "千问", true); audio.SpeechModel = "qwen-audio-3.1-tts-flash";
+            var a = SpeechProfiles.CapabilityOf(audio);
+            Equal(true, a.Styles, "Audio 3.1 supports reading styles");
+            Equal(true, a.Voices, "Audio 3.1 supports a voice list");
+            Equal(true, a.BritishVoices, "Audio 3.1 offers British voices");
+            Equal(0, a.Reason.Length, "a fully capable model needs no explanation");
+
+            var flash = new Configuration { Language = "English" };
+            ProviderProfiles.Prepare(flash, "千问", true); flash.SpeechModel = "qwen3-tts-flash";
+            var f = SpeechProfiles.CapabilityOf(flash);
+            Equal(false, f.Styles, "TTS Flash does not accept a reading style");
+            Equal(true, f.Voices, "TTS Flash offers a voice list");
+            Equal(true, f.ChildVoices, "TTS Flash offers child voices");
+            Equal(true, f.Reason.Contains("读法"), "the missing reading style is named");
+            Equal(true, f.Reason.Contains("Audio 3.1"), "the reason points at the model that does support it");
+
+            var japanese = new Configuration { Language = "Japanese" };
+            ProviderProfiles.Prepare(japanese, "千问", true);
+            var j = SpeechProfiles.CapabilityOf(japanese);
+            Equal(false, j.Styles && j.Voices, "other target languages get neither styles nor voices");
+            Equal(true, j.Reason.Contains("英语"), "the language limit is explained");
+
+            var local = new Configuration { LocalVoice = true };
+            Equal(false, SpeechProfiles.CapabilityOf(local).Voices, "system voice offers no vendor voice list");
+            Equal(true, SpeechProfiles.CapabilityOf(local).Reason.Contains("系统语音"), "system voice is named as the reason");
+
+            var unknown = new Configuration { Language = "English" };
+            ProviderProfiles.Prepare(unknown, "ElevenLabs", true);
+            Equal(false, SpeechProfiles.CapabilityOf(unknown).Styles, "a provider without a documented catalog gets no styles");
+        }
         static void LiquidChecks() {            var canvas=new System.Windows.Controls.Canvas();
             var window=new System.Windows.Window {Title="语伴 · 动效检查",Width=820,Height=590,Content=canvas,ShowInTaskbar=false};
             var material=new GlassMist(window,canvas);material.SetEnabled(true);window.Show();PumpLayout();
@@ -607,6 +640,7 @@ namespace EnglishCompanion {
                 Stage2Checks();
                 VoiceCatalogChecks();
                 ReadingStyleChecks();
+                CapabilityChecks();
                 if(Array.IndexOf(args,"--desktop-check")>=0) using(var tray=new TrayIcon(new System.Windows.Forms.ContextMenuStrip(),delegate {},true)) {
                     Equal(true,tray.Registered,"Windows accepts tray registration");
                     Equal(true,tray.HasRectangle(),"Windows exposes tray icon rectangle");

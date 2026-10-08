@@ -22,7 +22,7 @@ namespace EnglishCompanion {
             window=new Window {Title="语伴 · 朗读偏好",Owner=owner,Width=540,Height=440,ResizeMode=ResizeMode.NoResize,WindowStartupLocation=WindowStartupLocation.CenterOwner,FontFamily=owner.FontFamily,FontSize=14,Foreground=Skin.Brush(skin.Ink),Background=Skin.Brush(skin.Surface),ShowInTaskbar=false};
             window.Resources=owner.Resources;
             var layout=new Grid {Margin=new Thickness(26)};
-            foreach(double h in new[]{44.0,80,100,52,48})layout.RowDefinitions.Add(new RowDefinition {Height=new GridLength(h)});
+            foreach(double h in new[]{44.0,80,100,72,48})layout.RowDefinitions.Add(new RowDefinition {Height=new GridLength(h)});
             layout.Children.Add(new TextBlock {Text="朗读偏好",FontSize=23,FontWeight=FontWeights.SemiBold});
             var controls=new Grid();controls.ColumnDefinitions.Add(new ColumnDefinition());controls.ColumnDefinitions.Add(new ColumnDefinition {Width=new GridLength(16)});controls.ColumnDefinitions.Add(new ColumnDefinition());Grid.SetRow(controls,1);layout.Children.Add(controls);
             var styles=new StackPanel();styles.Children.Add(new TextBlock {Text="读法",Margin=new Thickness(0,0,0,6)});styles.Children.Add(style);controls.Children.Add(styles);
@@ -39,6 +39,12 @@ namespace EnglishCompanion {
             voice.SelectedIndex=0;
             for(int i=0;i<catalog.Count;i++) if(catalog[i].Id==saved&&saved.Length>0){voice.SelectedIndex=i;break;}
             style.SelectedIndex=Math.Max(0,Array.IndexOf(SpeechProfiles.StyleIds,config.SpeechStyle));
+            // 不支持的能力直接置灰并写明原因，不让用户调了才发现没反应。
+            var capability=SpeechProfiles.CapabilityOf(config);
+            style.IsEnabled=capability.Styles;
+            style.ToolTip=capability.Styles?"切换读法":"当前模型不接受读法指令";
+            voice.IsEnabled=capability.Voices;
+            if(!capability.Styles&&style.IsEnabled==false)style.Background=Skin.Brush(skin.Field);
             var sample=new TextBlock {Text=SpeechProfiles.Sample,FontFamily=new System.Windows.Media.FontFamily("Segoe UI"),FontSize=16,TextWrapping=TextWrapping.Wrap,VerticalAlignment=VerticalAlignment.Center};Grid.SetRow(sample,2);layout.Children.Add(sample);
             status.FontSize=12;status.Foreground=Skin.Brush(skin.Muted);status.TextWrapping=TextWrapping.Wrap;status.VerticalAlignment=VerticalAlignment.Center;Grid.SetRow(status,3);layout.Children.Add(status);
             var actions=new Grid();actions.ColumnDefinitions.Add(new ColumnDefinition());actions.ColumnDefinitions.Add(new ColumnDefinition());Grid.SetRow(actions,4);layout.Children.Add(actions);
@@ -55,9 +61,20 @@ namespace EnglishCompanion {
             config.EnglishVoice=(item!=null&&item.Tag!=null)?item.Tag as string:"";
         }
         void Refresh() {ReadSelection();bool supported=SpeechProfiles.Supported(config);listen.IsEnabled=apply.IsEnabled=supported;
+            var cap=SpeechProfiles.CapabilityOf(config);
             // OpenAI 要求向最终用户披露语音由 AI 生成；放在这里，不占用主设置页。
             string disclosure=ProviderProfiles.SpeechProvider(config)=="OpenAI"?"　朗读语音由 AI 生成。":"";
-            status.Text=supported?(System.IO.File.Exists(SpeechProfiles.SamplePath(config))?"已有试听，可直接播放":"首次试听使用语音额度；再次播放不重复生成")+disclosure:"当前平台的英语朗读暂无可选音色与朗读方式";}
+            if(supported) {
+                string cache=System.IO.File.Exists(SpeechProfiles.SamplePath(config))?"已有试听，可直接播放":"首次试听使用语音额度；再次播放不重复生成";
+                string line=cache+disclosure;
+                // 不支持的能力在下面补一句原因与出路，不占用主设置页，也不堆成长说明。
+                if(!cap.Styles)line+="\n"+"读法在当前模型不可用："+cap.Reason;
+                else if(cap.ChildVoices)line+="\n含童声（小女孩／小男孩／少年／少女）。";
+                status.Text=line;
+            } else {
+                status.Text=cap.Reason.Length>0?cap.Reason:"当前平台的英语朗读暂无可选音色与朗读方式";
+            }
+        }
         Task Listen() {
             var previous=SynchronizationContext.Current;
             try {SynchronizationContext.SetSynchronizationContext(new System.Windows.Threading.DispatcherSynchronizationContext(window.Dispatcher));return ListenCore();}

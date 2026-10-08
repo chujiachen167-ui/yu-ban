@@ -110,6 +110,19 @@ namespace EnglishCompanion {
                 }
                 win.Close(); owner.Close();
             }
+            // 能力提示：两个模型各自能做什么
+            foreach (var model in new[] { "qwen3-tts-flash", "qwen-audio-3.1-tts-flash" }) {
+                var c = new Configuration { SpeechModel = model, Theme = "glass" };
+                ProviderProfiles.Prepare(c, "千问", true); c.SpeechModel = model;
+                var owner = new Window { Width = 1, Height = 1, ShowInTaskbar = false, Left = -5000, Top = -5000 };
+                owner.Show();
+                var options = new SpeechOptionsWindow(owner, c);
+                var win = typeof(SpeechOptionsWindow).GetField("window", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(options) as Window;
+                win.Left = 60; win.Top = 60; win.Show();
+                Pump(500);
+                Shot(win, System.IO.Path.Combine(directory, "capability-" + (model.Contains("3.1") ? "31" : "30") + ".png"), 0);
+                win.Close(); owner.Close();
+            }
             Console.WriteLine("Panel screenshots written to " + directory);
             return 0;
         }
