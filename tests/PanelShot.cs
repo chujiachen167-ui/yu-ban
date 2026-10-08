@@ -125,6 +125,15 @@ namespace EnglishCompanion {
             }
             Console.WriteLine("Panel screenshots written to " + directory);
             return 0;
+            // i 弹窗：确认入口按钮在最上面
+            using (var settings = new SettingsWindow(new Configuration { Theme = "glass" }, true)) {
+                var owner = typeof(SettingsWindow).GetField("window", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(settings) as Window;
+                owner.Show(); Pump(300);
+                var info = (System.Windows.Controls.Button)owner.FindName("SpeechInfo");
+                info.RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+                Pump(400);
+                owner.Close();
+            }
         }
         static void Pump(int ms = 500) {
             var frame = new System.Windows.Threading.DispatcherFrame();
