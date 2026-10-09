@@ -151,6 +151,17 @@ namespace EnglishCompanion {
                     + " stretch=" + art.Stretch);
                 w.Close();
             }
+            // 测量三张卡真实需要的高度，窗口不能再靠裁切掩盖。
+            using (var m = new SettingsWindow(new Configuration { Theme = "glass" }, true)) {
+                var w = typeof(SettingsWindow).GetField("window", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(m) as Window;
+                w.Show(); Pump(600);
+                var card = (System.Windows.Controls.Border)w.FindName("LanguageCard");
+                var viewer = new System.Windows.Controls.ScrollViewer();
+                Console.WriteLine("LanguageCard bottom=" + Math.Round(card.TranslatePoint(new Point(0, card.ActualHeight), w).Y)
+                    + " window=" + w.ActualHeight
+                    + " => " + (card.TranslatePoint(new Point(0, card.ActualHeight), w).Y > w.ActualHeight - 82 ? "CLIPPED by footer" : "fits"));
+                w.Close();
+            }
             Console.WriteLine("Panel screenshots written to " + directory);
             return 0;
         }

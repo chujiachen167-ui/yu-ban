@@ -45,6 +45,7 @@ namespace EnglishCompanion {
             window.Loaded+=delegate { RefreshCardMaterials(); };
             Find<Border>("TranslationCard").SizeChanged+=delegate { RefreshCardMaterials(); };
             Find<Border>("SpeechCard").SizeChanged+=delegate { RefreshCardMaterials(); };
+            Find<Border>("LanguageCard").SizeChanged+=delegate { RefreshCardMaterials(); };
             currentTranslation=ProviderProfiles.TranslationProvider(draft); currentSpeech=ProviderProfiles.SpeechProvider(draft);
             foreach(var provider in ProviderProfiles.Translation)translation.Items.Add(provider.Name);if(currentTranslation=="原有配置")translation.Items.Add(currentTranslation);
             foreach(var provider in ProviderProfiles.Speech)speech.Items.Add(provider.Name);if(currentSpeech=="原有配置")speech.Items.Add(currentSpeech);speech.Items.Add("系统语音");
@@ -77,12 +78,15 @@ namespace EnglishCompanion {
         }
         T Find<T>(string name) where T:class { return (T)window.FindName(name); }
         string LearningId() { return learning!=null&&learning.SelectedIndex==1?"Chinese":"English"; }
-        // 标题栏里只有一行位置，说明要短：只说结果，不解释原理。
+        // 位置回到 Key 卡下方，可以把话说完整：告诉用户这个选择会带来什么。
         void RefreshLanguageHint() {
             if(languageHint==null)return;
             bool chinese=LearningId()=="Chinese";
             var cap=SpeechProfiles.CapabilityOf(draft);
-            languageHint.Text=(chinese?"译成中文":"译成英文")+(cap.Voices?"":" · 该平台暂无"+ (chinese?"中文":"英语") +"音色");
+            string speech=cap.Voices
+                ? (chinese?"朗读会用中文音色。":"朗读会用英语音色。")
+                : (chinese?"当前平台未提供中文音色，可在「模型与接口」调整。":"当前平台未提供英语音色，可在「模型与接口」调整。");
+            languageHint.Text=(chinese?"你写中文或英文，我译成中文。":"你写中文或英文，我译成英文。")+"\n"+speech;
         }
         void ApplySkin() {
             var skin=Skin.Get(draft.Theme); draft.Theme=skin.Id;
@@ -100,8 +104,8 @@ namespace EnglishCompanion {
             Find<Image>("BrandIcon").Visibility=Visibility.Collapsed;
             mist.SetEnabled(glass);
             Find<Image>("Artwork").Source=Skin.Artwork(skin.Id);
-            // 标题栏现在左侧有语言选择，字标必须下移让位，否则会与它重叠。
-            Find<Border>("BrandPlate").Margin=new Thickness(52,78,0,0);
+            // 标题栏左侧空了，字标回到原来的位置。
+            Find<Border>("BrandPlate").Margin=new Thickness(52,44,0,0);
             Find<StackPanel>("Brand").Orientation=baby?Orientation.Horizontal:Orientation.Vertical;
             Find<TextBlock>("Tagline").Visibility=skin.Id=="ocean"?Visibility.Collapsed:Visibility.Visible;
             Find<TextBlock>("Tagline").VerticalAlignment=VerticalAlignment.Center;
@@ -117,6 +121,7 @@ namespace EnglishCompanion {
             var skin=Skin.Get(draft.Theme);
             ApplyCardMaterial("TranslationCard","TranslationProvider","TranslationKeyHost",skin);
             ApplyCardMaterial("SpeechCard","SpeechProvider","SpeechKeyHost",skin);
+            ApplyCardMaterial("LanguageCard","LearningLanguage","LanguageHint",skin);
         }
         void ApplyCardMaterial(string cardName,string providerName,string keyName,Skin skin) {
             var card=Find<Border>(cardName);

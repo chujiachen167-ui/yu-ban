@@ -1,5 +1,5 @@
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
- Title="语伴 · 模型配置" Width="820" Height="590" WindowStartupLocation="CenterScreen" WindowStyle="None" ResizeMode="NoResize" AllowsTransparency="True" Background="Transparent" FontFamily="Microsoft YaHei UI" FontSize="14" Foreground="{DynamicResource Ink}" ShowInTaskbar="True" UseLayoutRounding="True" TextOptions.TextFormattingMode="Display">
+ Title="语伴 · 模型配置" Width="820" Height="680" WindowStartupLocation="CenterScreen" WindowStyle="None" ResizeMode="NoResize" AllowsTransparency="True" Background="Transparent" FontFamily="Microsoft YaHei UI" FontSize="14" Foreground="{DynamicResource Ink}" ShowInTaskbar="True" UseLayoutRounding="True" TextOptions.TextFormattingMode="Display">
  <Window.Resources>
   <SolidColorBrush x:Key="Ink" Color="#172B4D"/><SolidColorBrush x:Key="Muted" Color="#526782"/><SolidColorBrush x:Key="Accent" Color="#3979E7"/><SolidColorBrush x:Key="Panel" Color="#E8FFFFFF"/><SolidColorBrush x:Key="Edge" Color="#75FFFFFF"/>
   <Style TargetType="Button"><Setter Property="Cursor" Value="Hand"/><Setter Property="Foreground" Value="{DynamicResource Ink}"/><Setter Property="Background" Value="Transparent"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="B" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}" CornerRadius="10"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="B" Property="BorderBrush" Value="{DynamicResource Focus}"/><Setter TargetName="B" Property="BorderThickness" Value="1"/></Trigger><Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="B" Property="BorderBrush" Value="{DynamicResource Accent}"/><Setter TargetName="B" Property="BorderThickness" Value="2"/></Trigger><Trigger Property="IsEnabled" Value="False"><Setter TargetName="B" Property="Opacity" Value="0.4"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>
@@ -24,19 +24,12 @@
  </Window.Resources>
  <Border x:Name="Shell" CornerRadius="24" BorderBrush="{DynamicResource Edge}" BorderThickness="1" ClipToBounds="True">
   <Grid>
-   <Grid.RowDefinitions><RowDefinition Height="150"/><RowDefinition Height="*"/><RowDefinition Height="82"/></Grid.RowDefinitions>
+   <Grid.RowDefinitions><RowDefinition Height="134"/><RowDefinition Height="*"/><RowDefinition Height="82"/></Grid.RowDefinitions>
    <!-- 皮肤插画与液面铺满整个窗口：必须跨所有行，否则会被压扁变形。 -->
    <Image x:Name="Artwork" Grid.RowSpan="3" Stretch="Fill" IsHitTestVisible="False"/>
    <Grid Grid.Row="0">
    <Canvas x:Name="Mist" Grid.RowSpan="3" IsHitTestVisible="False" ClipToBounds="True"/>
    <Grid x:Name="TitleBar" Height="60" VerticalAlignment="Top" Background="Transparent" Margin="24,0,20,0">
-    <Border HorizontalAlignment="Left" VerticalAlignment="Center" Background="{DynamicResource SettingsPanel}" CornerRadius="14" Padding="12,6,12,6">
-     <StackPanel Orientation="Horizontal">
-      <TextBlock Text="我在学" VerticalAlignment="Center" Foreground="{DynamicResource Muted}" Margin="0,0,10,0"/>
-      <ComboBox x:Name="LearningLanguage" Width="116" Height="34" FontSize="13" AutomationProperties.Name="选择要学的语言" ToolTip="决定翻译方向与朗读语言"/>
-      <TextBlock x:Name="LanguageHint" VerticalAlignment="Center" Foreground="{DynamicResource Muted}" FontSize="12" Margin="12,0,0,0" MaxWidth="300" TextTrimming="CharacterEllipsis"/>
-     </StackPanel>
-    </Border>
      <Border HorizontalAlignment="Right" VerticalAlignment="Center" Background="{DynamicResource SettingsPanel}" CornerRadius="14" Padding="10,5,3,5"><StackPanel Orientation="Horizontal">
      <TextBlock Text="皮肤" VerticalAlignment="Center" Foreground="{DynamicResource Muted}" Margin="0,0,10,0"/>
      <ComboBox x:Name="SkinPicker" Width="122" Height="34" FontSize="12" AutomationProperties.Name="更换皮肤"/>
@@ -66,6 +59,16 @@
       </Button>
      </StackPanel></DockPanel>
       <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="190"/><ColumnDefinition Width="14"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><ComboBox x:Name="SpeechProvider" FontSize="16" AutomationProperties.Name="语音服务商"/><Grid x:Name="SpeechKeyHost" Grid.Column="2"/></Grid>
+     </StackPanel>
+    </Border>
+    <!-- 学哪种语言：放在两张 Key 卡之下的空白处，不与它们争夺注意力，也不空着。 -->
+    <Border x:Name="LanguageCard" CornerRadius="20" BorderBrush="{DynamicResource Edge}" BorderThickness="1" Padding="20,13,20,15" Margin="0,14,0,0" VerticalAlignment="Top">
+     <StackPanel>
+      <TextBlock Text="我在学" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,10"/>
+      <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="190"/><ColumnDefinition Width="14"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+       <ComboBox x:Name="LearningLanguage" Height="46" FontSize="16" AutomationProperties.Name="选择要学的语言" ToolTip="决定翻译方向与朗读语言"/>
+       <TextBlock x:Name="LanguageHint" Grid.Column="2" Foreground="{DynamicResource Muted}" FontSize="13" VerticalAlignment="Center" TextWrapping="Wrap"/>
+      </Grid>
      </StackPanel>
     </Border>
    </StackPanel>
