@@ -22,12 +22,14 @@ namespace EnglishCompanion {
             window=new Window {Title="语伴 · 朗读偏好",Owner=owner,Width=540,Height=440,ResizeMode=ResizeMode.NoResize,WindowStartupLocation=WindowStartupLocation.CenterOwner,FontFamily=owner.FontFamily,FontSize=14,Foreground=Skin.Brush(skin.Ink),Background=Skin.Brush(skin.Surface),ShowInTaskbar=false};
             window.Resources=owner.Resources;
             var layout=new Grid {Margin=new Thickness(26)};
-            foreach(double h in new[]{44.0,80,100,72,48})layout.RowDefinitions.Add(new RowDefinition {Height=new GridLength(h)});
+            foreach(double h in new[]{44.0,96,100,72,48})layout.RowDefinitions.Add(new RowDefinition {Height=new GridLength(h)});
             layout.Children.Add(new TextBlock {Text="朗读偏好",FontSize=23,FontWeight=FontWeights.SemiBold});
             var controls=new Grid();controls.ColumnDefinitions.Add(new ColumnDefinition());controls.ColumnDefinitions.Add(new ColumnDefinition {Width=new GridLength(16)});controls.ColumnDefinitions.Add(new ColumnDefinition());Grid.SetRow(controls,1);layout.Children.Add(controls);
             var styles=new StackPanel();styles.Children.Add(new TextBlock {Text="读法",Margin=new Thickness(0,0,0,6)});styles.Children.Add(style);controls.Children.Add(styles);
             var voices=new StackPanel();voices.Children.Add(new TextBlock {Text="英语音色",Margin=new Thickness(0,0,0,6)});voices.Children.Add(voice);Grid.SetColumn(voices,2);controls.Children.Add(voices);
-            style.Height=voice.Height=40;AutomationProperties.SetName(style,"朗读方式");AutomationProperties.SetName(voice,"英语音色");
+            // 高度与字号统一走 Settings.xaml 的共享样式，这里不再单独覆盖：
+            // 之前写死 40，和样式里的 52 打架，文字被挤得上下不居中。
+            AutomationProperties.SetName(style,"朗读方式");AutomationProperties.SetName(voice,"英语音色");
             foreach(string name in SpeechProfiles.StyleNames)style.Items.Add(name);
             // 音色来自当前服务商与模型的真实目录；换一家平台，选项跟着变。
             var catalog=SpeechProfiles.Catalog(config);
@@ -48,8 +50,8 @@ namespace EnglishCompanion {
             var sample=new TextBlock {Text=SpeechProfiles.Sample,FontFamily=new System.Windows.Media.FontFamily("Segoe UI"),FontSize=16,TextWrapping=TextWrapping.Wrap,VerticalAlignment=VerticalAlignment.Center};Grid.SetRow(sample,2);layout.Children.Add(sample);
             status.FontSize=12;status.Foreground=Skin.Brush(skin.Muted);status.TextWrapping=TextWrapping.Wrap;status.VerticalAlignment=VerticalAlignment.Center;Grid.SetRow(status,3);layout.Children.Add(status);
             var actions=new Grid();actions.ColumnDefinitions.Add(new ColumnDefinition());actions.ColumnDefinitions.Add(new ColumnDefinition());Grid.SetRow(actions,4);layout.Children.Add(actions);
-            var listenContent=new StackPanel {Orientation=Orientation.Horizontal};listenContent.Children.Add(activity);listenContent.Children.Add(listenLabel);listen.Content=listenContent;listen.Width=100;listen.Height=40;listen.HorizontalAlignment=HorizontalAlignment.Left;listen.BorderThickness=new Thickness(1);listen.Background=Skin.Brush(skin.Hover);actions.Children.Add(listen);
-            apply.Content="采用";apply.Width=100;apply.Height=40;apply.HorizontalAlignment=HorizontalAlignment.Right;apply.Background=Skin.Brush(skin.Accent);apply.Foreground=Skin.Brush(skin.ButtonInk);Grid.SetColumn(apply,1);actions.Children.Add(apply);
+            var listenContent=new StackPanel {Orientation=Orientation.Horizontal};listenContent.Children.Add(activity);listenContent.Children.Add(listenLabel);listen.Content=listenContent;listen.Width=104;listen.Height=44;listen.FontSize=15;listen.HorizontalAlignment=HorizontalAlignment.Left;listen.BorderThickness=new Thickness(1);listen.Background=Skin.Brush(skin.Hover);actions.Children.Add(listen);
+            apply.Content="采用";apply.Width=104;apply.Height=44;apply.FontSize=15;apply.HorizontalAlignment=HorizontalAlignment.Right;apply.Background=Skin.Brush(skin.Accent);apply.Foreground=Skin.Brush(skin.ButtonInk);Grid.SetColumn(apply,1);actions.Children.Add(apply);
             style.SelectionChanged+=delegate {Stop();Refresh();};voice.SelectionChanged+=delegate {Stop();Refresh();};
             listen.Click+=async delegate {await Listen();};
             apply.Click+=delegate {ReadSelection();source.SpeechStyle=config.SpeechStyle;source.EnglishVoice=config.EnglishVoice;window.DialogResult=true;};

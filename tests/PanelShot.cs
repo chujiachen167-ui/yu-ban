@@ -218,11 +218,41 @@ namespace EnglishCompanion {
                     + " => " + (card.TranslatePoint(new Point(0, card.ActualHeight), w).Y > w.ActualHeight - 82 ? "CLIPPED by footer" : "fits"));
                 w.Close();
             }
+            // 控件一致性：高度、字号、文字是否垂直居中。用户反复看到不统一。
+            using (var probe = new SettingsWindow(new Configuration { Theme = "glass" }, true)) {
+                var w = typeof(SettingsWindow).GetField("window", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(probe) as Window;
+                w.Left = 40; w.Top = 40; w.Show(); Pump(800);
+                foreach (var name in new[] { "SkinPicker", "TranslationProvider", "SpeechProvider", "LearningLanguage" }) {
+                    var box = w.FindName(name) as System.Windows.Controls.ComboBox;
+                    if (box == null) continue;
+                    // 选中项文字块的中心与控件中心之差，就是垂直偏心量。
+                    var content = box.Template.FindName("", box) as FrameworkElement;
+                    double offset = -1;
+                    var presenter = FindPresenter(box);
+                    if (presenter != null && presenter.ActualHeight > 0) {
+                        double want = box.ActualHeight / 2;
+                        double got = presenter.TranslatePoint(new Point(0, presenter.ActualHeight / 2), box).Y;
+                        offset = Math.Round(Math.Abs(got - want), 1);
+                    }
+                    Console.WriteLine("Control[" + name + "] h=" + box.ActualHeight + " font=" + box.FontSize
+                        + " centerOffset=" + (offset < 0 ? "n/a" : offset.ToString()));
+                }
+                w.Close();
+            }
             Console.WriteLine("Panel screenshots written to " + directory);
             return 0;
         }
-        static void Pump(int ms = 500) {
-            var frame = new System.Windows.Threading.DispatcherFrame();
+        // 找到 ComboBox 模板里承载选中文字的那个 ContentPresenter。
+        static FrameworkElement FindPresenter(System.Windows.Controls.ComboBox box) {
+            var grid = System.Windows.Media.VisualTreeHelper.GetChild(box, 0) as System.Windows.Media.Visual;
+            if (grid == null) return null;
+            for (int i = 0; i < System.Windows.Media.VisualTreeHelper.GetChildrenCount(grid); i++) {
+                var child = System.Windows.Media.VisualTreeHelper.GetChild(grid, i) as FrameworkElement;
+                if (child is System.Windows.Controls.ContentPresenter) return child;
+            }
+            return null;
+        }
+        static void Pump(int ms = 500) {            var frame = new System.Windows.Threading.DispatcherFrame();
             var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(ms) };
             timer.Tick += delegate { timer.Stop(); frame.Continue = false; }; timer.Start();
             System.Windows.Threading.Dispatcher.PushFrame(frame);
