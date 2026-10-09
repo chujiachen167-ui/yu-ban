@@ -124,12 +124,19 @@ namespace EnglishCompanion {
                 win.Close(); owner.Close();
             }
             // 设置页顶部的语言入口：用户在这里决定自己学什么
-            foreach (var lang in new[] { "Chinese", "English" }) {
-                using (var settings = new SettingsWindow(new Configuration { Theme = "glass", Language = lang }, true)) {
+            foreach (var theme in new[] { "glass", "ocean", "baby" }) {
+                using (var settings = new SettingsWindow(new Configuration { Theme = theme, Language = "English" }, true)) {
                     var w = typeof(SettingsWindow).GetField("window", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(settings) as Window;
                     w.Left = 40; w.Top = 40; w.Show();
                     Pump(700);
-                    Shot(w, System.IO.Path.Combine(directory, "settings-lang-" + lang.ToLowerInvariant() + ".png"), 0);
+                    // 报告真实布局：内容高度、窗口高度、是否溢出、确认按钮位置。
+                    var root = w.Content as FrameworkElement;
+                    var confirm = w.FindName("Confirm") as System.Windows.Controls.Button;
+                    double need = root == null ? 0 : root.DesiredSize.Height;
+                    Console.WriteLine("Layout[" + theme + "] window=" + w.ActualHeight
+                        + " contentNeeded=" + Math.Round(need)
+                        + " overflow=" + (need > w.ActualHeight ? "YES(+ " + Math.Round(need - w.ActualHeight) + ")" : "no"));
+                    Shot(w, System.IO.Path.Combine(directory, "settings-" + theme + ".png"), 0);
                     w.Close();
                 }
             }
