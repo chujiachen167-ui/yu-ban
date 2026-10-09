@@ -24,13 +24,20 @@
  </Window.Resources>
  <Border x:Name="Shell" CornerRadius="24" BorderBrush="{DynamicResource Edge}" BorderThickness="1" ClipToBounds="True">
   <Grid>
-   <Grid.RowDefinitions><RowDefinition Height="184"/><RowDefinition Height="*"/><RowDefinition Height="82"/></Grid.RowDefinitions>
+   <Grid.RowDefinitions><RowDefinition Height="150"/><RowDefinition Height="*"/><RowDefinition Height="82"/></Grid.RowDefinitions>
    <!-- 皮肤插画与液面铺满整个窗口：必须跨所有行，否则会被压扁变形。 -->
    <Image x:Name="Artwork" Grid.RowSpan="3" Stretch="Fill" IsHitTestVisible="False"/>
    <Grid Grid.Row="0">
    <Canvas x:Name="Mist" Grid.RowSpan="3" IsHitTestVisible="False" ClipToBounds="True"/>
    <Grid x:Name="TitleBar" Height="60" VerticalAlignment="Top" Background="Transparent" Margin="24,0,20,0">
-    <Border HorizontalAlignment="Right" VerticalAlignment="Center" Background="{DynamicResource SettingsPanel}" CornerRadius="14" Padding="10,5,3,5"><StackPanel Orientation="Horizontal">
+    <Border HorizontalAlignment="Left" VerticalAlignment="Center" Background="{DynamicResource SettingsPanel}" CornerRadius="14" Padding="12,6,12,6">
+     <StackPanel Orientation="Horizontal">
+      <TextBlock Text="我在学" VerticalAlignment="Center" Foreground="{DynamicResource Muted}" Margin="0,0,10,0"/>
+      <ComboBox x:Name="LearningLanguage" Width="116" Height="34" FontSize="13" AutomationProperties.Name="选择要学的语言" ToolTip="决定翻译方向与朗读语言"/>
+      <TextBlock x:Name="LanguageHint" VerticalAlignment="Center" Foreground="{DynamicResource Muted}" FontSize="12" Margin="12,0,0,0" MaxWidth="300" TextTrimming="CharacterEllipsis"/>
+     </StackPanel>
+    </Border>
+     <Border HorizontalAlignment="Right" VerticalAlignment="Center" Background="{DynamicResource SettingsPanel}" CornerRadius="14" Padding="10,5,3,5"><StackPanel Orientation="Horizontal">
      <TextBlock Text="皮肤" VerticalAlignment="Center" Foreground="{DynamicResource Muted}" Margin="0,0,10,0"/>
      <ComboBox x:Name="SkinPicker" Width="122" Height="34" FontSize="12" AutomationProperties.Name="更换皮肤"/>
      <Button x:Name="Minimize" Content="−" Width="34" Height="34" Margin="14,0,0,0" FontSize="21" AutomationProperties.Name="最小化"/>
@@ -47,14 +54,6 @@
     <ScrollContentPresenter Grid.Column="0"/><ScrollBar Grid.Column="1" Width="8" MinWidth="0" Opacity="0.6" HorizontalAlignment="Left"/>
    </Grid></ControlTemplate></ScrollViewer.Template>
    <StackPanel>
-    <Border CornerRadius="20" BorderBrush="{DynamicResource Edge}" BorderThickness="1" Padding="20,15,20,17" Margin="0,0,0,14">
-     <StackPanel>
-      <TextBlock Text="我在学" FontSize="17" FontWeight="SemiBold" Margin="0,0,0,10"/>
-      <TextBlock Text="决定翻译往哪个方向翻，也决定朗读用哪种语言。" Foreground="{DynamicResource Muted}" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,10"/>
-      <ComboBox x:Name="LearningLanguage" FontSize="16" AutomationProperties.Name="选择要学的语言" HorizontalAlignment="Left" Width="220" MinHeight="40"/>
-      <TextBlock x:Name="LanguageHint" Foreground="{DynamicResource Muted}" FontSize="12" TextWrapping="Wrap" Margin="0,10,0,0"/>
-     </StackPanel>
-    </Border>
     <Border x:Name="TranslationCard" CornerRadius="20" BorderBrush="{DynamicResource Edge}" BorderThickness="1" Padding="20,15,20,17">
      <StackPanel><DockPanel Margin="0,0,0,12"><TextBlock x:Name="TranslationState" DockPanel.Dock="Right" Foreground="#2965B5" FontSize="12" VerticalAlignment="Center"/><StackPanel Orientation="Horizontal"><TextBlock Text="翻译模型配置" FontSize="17" FontWeight="SemiBold" VerticalAlignment="Center"/><Button x:Name="TranslationInfo" Style="{StaticResource Info}" AutomationProperties.Name="翻译模型配置说明"/></StackPanel></DockPanel>
       <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="190"/><ColumnDefinition Width="14"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><ComboBox x:Name="TranslationProvider" FontSize="16" AutomationProperties.Name="翻译服务商"/><Grid x:Name="TranslationKeyHost" Grid.Column="2"/></Grid>
