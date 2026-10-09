@@ -700,6 +700,16 @@ namespace EnglishCompanion {
                 Equal(true,scrollable!=null&&scrollable.Word=="scrollable"&&scrollable.Meaning.Contains("卷动"),"unranked adjective scrollable retains its own meaning");
                 Equal(true,WordDictionary.Find("clickable").GetAwaiter().GetResult()!=null,"unranked computing word clickable remains available");
                 Equal<WordEntry>(null,WordDictionary.Find("zzzznotawordzzzz").GetAwaiter().GetResult(),"unknown word not fabricated");
+                // 回归：用户报过 counterintuitive 查不到，但词条其实在词典里 —— 这是取词或加载的问题，不是词库缺词。
+                var counter=WordDictionary.Find("counterintuitive").GetAwaiter().GetResult();
+                Equal(true,counter!=null&&counter.Meaning.Length>0,"counterintuitive resolves in the local dictionary");
+                Equal(true,counter!=null&&counter.Phonetic.Length>0,"counterintuitive has a phonetic transcription");
+                foreach(var probe in new[]{"unpredictable","ubiquitous","ephemeral","pragmatic","ambiguous","inherent","subtle","albeit","nevertheless","furthermore","nonetheless","consequently"})
+                    Equal(true,WordDictionary.Find(probe).GetAwaiter().GetResult()!=null,"common academic word resolves: "+probe);
+                // 浮窗取词时可能带上空格或大写，查询都要容错。
+                Equal(true,WordDictionary.Find("  tomorrow  ").GetAwaiter().GetResult()!=null,"lookup ignores surrounding spaces");
+                Equal(true,WordDictionary.Find("TOMORROW").GetAwaiter().GetResult()!=null,"lookup is case insensitive");
+                Equal(true,WordDictionary.Find("don’t").GetAwaiter().GetResult()!=null,"curly apostrophe resolves");
                 var fastTyping=new TypingSession();fastTyping.Baseline(S("","fast"));
                 fastTyping.Observe(S("我明天想去看电影。","fast"),false,clock);
                 Equal<string>(null,fastTyping.Observe(S("我明天想去看电影。","fast"),false,clock.AddMilliseconds(499)),"typing waits until 500ms");
