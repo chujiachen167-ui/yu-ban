@@ -140,6 +140,17 @@ namespace EnglishCompanion {
                     w.Close();
                 }
             }
+            // 皮肤插画必须铺满整个窗口：单独量一次，确认它没有被行裁切或拉伸。
+            using (var probe = new SettingsWindow(new Configuration { Theme = "baby" }, true)) {
+                var w = typeof(SettingsWindow).GetField("window", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(probe) as Window;
+                w.Left = 40; w.Top = 40; w.Show(); Pump(600);
+                var art = (System.Windows.Controls.Image)w.FindName("Artwork");
+                Console.WriteLine("Artwork: window=" + w.ActualWidth + "x" + w.ActualHeight
+                    + " actual=" + Math.Round(art.ActualWidth) + "x" + Math.Round(art.ActualHeight)
+                    + " top=" + Math.Round(art.TranslatePoint(new Point(0, 0), w).Y)
+                    + " stretch=" + art.Stretch);
+                w.Close();
+            }
             Console.WriteLine("Panel screenshots written to " + directory);
             return 0;
         }

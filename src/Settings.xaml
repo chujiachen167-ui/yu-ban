@@ -25,9 +25,10 @@
  <Border x:Name="Shell" CornerRadius="24" BorderBrush="{DynamicResource Edge}" BorderThickness="1" ClipToBounds="True">
   <Grid>
    <Grid.RowDefinitions><RowDefinition Height="184"/><RowDefinition Height="*"/><RowDefinition Height="82"/></Grid.RowDefinitions>
+   <!-- 皮肤插画与液面铺满整个窗口：必须跨所有行，否则会被压扁变形。 -->
+   <Image x:Name="Artwork" Grid.RowSpan="3" Stretch="Fill" IsHitTestVisible="False"/>
    <Grid Grid.Row="0">
-   <Canvas x:Name="Mist" IsHitTestVisible="False" ClipToBounds="True"/>
-   <Image x:Name="Artwork" Stretch="Fill" IsHitTestVisible="False"/>
+   <Canvas x:Name="Mist" Grid.RowSpan="3" IsHitTestVisible="False" ClipToBounds="True"/>
    <Grid x:Name="TitleBar" Height="60" VerticalAlignment="Top" Background="Transparent" Margin="24,0,20,0">
     <Border HorizontalAlignment="Right" VerticalAlignment="Center" Background="{DynamicResource SettingsPanel}" CornerRadius="14" Padding="10,5,3,5"><StackPanel Orientation="Horizontal">
      <TextBlock Text="皮肤" VerticalAlignment="Center" Foreground="{DynamicResource Muted}" Margin="0,0,10,0"/>
