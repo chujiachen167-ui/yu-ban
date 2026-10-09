@@ -13,6 +13,8 @@ namespace EnglishCompanion {
         public string SpeechUrl = "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation";
         public string SpeechModel = "qwen3-tts-flash", Voice = "Cherry", SpeechSecret = "";
         public string Language = "English", Style = "自然口语";
+        // 默认目标语言。输入语言与它相同时自动取反，所以这个默认值不锁死翻译方向。
+        public const string DefaultLanguage = "English";
         public string SpeechStyle = "original", EnglishVoice = "";
         public string Theme = "glass";
         public string TranslationService = "", SpeechService = "";

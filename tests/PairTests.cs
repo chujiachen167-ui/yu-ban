@@ -76,8 +76,15 @@ namespace EnglishCompanion {
             Equal(TextDirection.EnglishToChinese, Sentences.Detect("I want to leave early today."), "English input direction");
             Equal(TextDirection.ChineseToEnglish, Sentences.Detect("今天我想早点出门 leave early。"), "mixed input with more Chinese leans Chinese");
             Equal(TextDirection.EnglishToChinese, Sentences.Detect("I want to leave early 早一点出门。"), "mixed input with more English leans English");
-            Equal("English", Sentences.TargetLanguage("English", TextDirection.EnglishToChinese), "Chinese input yields English pairs");
+            Equal("English", Sentences.TargetLanguage("Auto", TextDirection.ChineseToEnglish), "Auto follows the input direction");
+            // 设置里写着 English：用户输中文就得译成英文（正常路径）。
+            Equal("English", Sentences.TargetLanguage("English", TextDirection.ChineseToEnglish), "a user learning English gets English from Chinese input");
+            // 但同一把设置下输入英文，说明是在查另一种语言，必须译成中文而不是又回英文。
+            Equal("Chinese", Sentences.TargetLanguage("English", TextDirection.EnglishToChinese), "English input flips to Chinese instead of echoing back English");
             Equal("Chinese", Sentences.TargetLanguage("Auto", TextDirection.EnglishToChinese), "English input yields Chinese pairs");
+            // 回归：默认 Language 写死为 English。用户没动过设置时输入英文，必须译成中文。
+            Equal("Chinese", Sentences.TargetLanguage(Configuration.DefaultLanguage, TextDirection.EnglishToChinese), "default config still flips direction for English input");
+            Equal("English", Sentences.TargetLanguage(Configuration.DefaultLanguage, TextDirection.ChineseToEnglish), "default config keeps English target for Chinese input");
             // --- 稳定 ID，原文不可改写 ---
             var groups = Sentences.Groups("第一句。第二句。第三句。");
             Equal(3, groups.Count, "group count follows sentence count");
