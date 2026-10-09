@@ -264,15 +264,19 @@ namespace EnglishCompanion {
                     + " stretch=" + art.Stretch);
                 w.Close();
             }
-            // 测量三张卡真实需要的高度，窗口不能再靠裁切掩盖。
+            // 语言入口必须在底栏内、不被裁切，并且是按钮而不是占满一行的大卡片。
             using (var m = new SettingsWindow(new Configuration { Theme = "glass" }, true)) {
                 var w = typeof(SettingsWindow).GetField("window", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(m) as Window;
                 w.Show(); Pump(600);
-                var card = (System.Windows.Controls.Border)w.FindName("LanguageCard");
-                var viewer = new System.Windows.Controls.ScrollViewer();
-                Console.WriteLine("LanguageCard bottom=" + Math.Round(card.TranslatePoint(new Point(0, card.ActualHeight), w).Y)
-                    + " window=" + w.ActualHeight
-                    + " => " + (card.TranslatePoint(new Point(0, card.ActualHeight), w).Y > w.ActualHeight - 82 ? "CLIPPED by footer" : "fits"));
+                var card = w.FindName("LanguageCard") as System.Windows.Controls.Border;
+                var entry = w.FindName("LearningEntry") as System.Windows.Controls.Button;
+                EqualShot(card == null, "the oversized language card is gone");
+                EqualShot(entry != null, "the language entry exists in the footer");
+                if (entry != null) {
+                    double bottom = entry.TranslatePoint(new Point(0, entry.ActualHeight), w).Y;
+                    Console.WriteLine("LanguageEntry bottom=" + Math.Round(bottom) + " window=" + w.ActualHeight
+                        + " => " + (bottom > w.ActualHeight ? "CLIPPED" : "fits inside the footer"));
+                }
                 w.Close();
             }
             // 控件一致性：高度、字号、文字是否垂直居中。用户反复看到不统一。
@@ -296,6 +300,35 @@ namespace EnglishCompanion {
                 }
                 w.Close();
             }
+            // 查词模式：输入一个英文词，浮窗直接给音标、词性与释义。
+            using (var panel = new Overlay(true)) {
+                panel.Learnable = true;
+                var list = new System.Collections.Generic.List<WordEntry>();
+                list.Add(new WordEntry { Word = "record", Phonetic = "ˈrekɔ:d", PartOfSpeech = "n.", Meaning = "记录；唱片；最高纪录" });
+                list.Add(new WordEntry { Word = "record", Phonetic = "riˈkɔ:d", PartOfSpeech = "v.", Meaning = "记录；录音；登记" });
+                panel.ShowWordEntries("record", list);
+                panel.SetLookup(true);
+                panel.Follow(new System.Drawing.Rectangle(60, 500, 2, 20));
+                Pump(500); Pump(400);
+                var lw = typeof(Overlay).GetField("window", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(panel) as Window;
+                if (lw != null) Shot(lw, System.IO.Path.Combine(directory, "lookup-record.png"), 0);
+                panel.ShowWordEntries("zzzznotawordzzzz", new System.Collections.Generic.List<WordEntry>());
+                Pump(500);
+                if (lw != null) Shot(lw, System.IO.Path.Combine(directory, "lookup-miss.png"), 0);
+                var footerField = typeof(Overlay).GetField("footer", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                var footer = footerField == null ? null : footerField.GetValue(panel) as System.Windows.Controls.Border;
+                if (footer != null) {
+                    var dock = footer.Child as System.Windows.Controls.DockPanel;
+                    var names = new System.Collections.Generic.List<string>();
+                    if (dock != null) {
+                        foreach (var child in dock.Children) {
+                            var button = child as System.Windows.Controls.Button;
+                            if (button != null) names.Add(System.Windows.Automation.AutomationProperties.GetName(button));
+                        }
+                    }
+                    Console.WriteLine("Footer order: " + String.Join(" | ", names.ToArray()));
+                }
+            }
             Console.WriteLine("Panel screenshots written to " + directory);
             return 0;
         }
@@ -308,6 +341,10 @@ namespace EnglishCompanion {
                 if (child is System.Windows.Controls.ContentPresenter) return child;
             }
             return null;
+        }
+        // 截图自检用的轻量断言：不抛异常，只把结论打到控制台，方便一眼看出问题。
+        static void EqualShot(bool ok, string what) {
+            Console.WriteLine((ok ? "  OK   " : "  FAIL ") + what);
         }
         static void Pump(int ms = 500) {            var frame = new System.Windows.Threading.DispatcherFrame();
             var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(ms) };

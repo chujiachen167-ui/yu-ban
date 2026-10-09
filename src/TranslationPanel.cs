@@ -40,6 +40,9 @@ namespace EnglishCompanion {
         readonly System.Windows.Shapes.Path pinShape;
         internal readonly OverlayText Original,Translation;
         internal readonly OverlayButton Speak,Retry,Settings,Manual;
+        // 查词开关：打开后输入英文直接给音标与词性，不再走翻译。
+        internal readonly OverlayButton Lookup;
+        internal event Action LookupToggled;
         internal event Action Dismissed;
         internal Action<string> SpeakWord;
         internal Func<string,string,CancellationToken,Task<string>> ExplainWord;
@@ -108,15 +111,23 @@ namespace EnglishCompanion {
             Settings=new OverlayButton("","\uE713");Settings.Name("设置");close=new OverlayButton("","\uE711");close.Name("关闭");
             close.Control.Width=Settings.Control.Width=40;close.Control.Height=Settings.Control.Height=40;close.Control.Padding=Settings.Control.Padding=new Thickness(0);
             Manual=new OverlayButton("粘贴翻译","\uE77F");Manual.Control.Visibility=Visibility.Collapsed;
+            // 查词：常驻开关，打开后输入英文直接给音标与词性，不走翻译。
+            Lookup=new OverlayButton("查词","\uE721");Lookup.Name("查词");
             DockPanel.SetDock(close.Control,Dock.Right);buttons.Children.Add(close.Control);
             DockPanel.SetDock(Settings.Control,Dock.Right);buttons.Children.Add(Settings.Control);
             // 翻译进行中时，等待点占用重试按钮的位置，宽度一致，其它按钮不移动。
             busy.Width=Retry.Control.Width;busy.Height=Retry.Control.Height;busy.Visibility=Visibility.Collapsed;
+            // 顺序按用户要求：朗读 → 查词 → 重新翻译 → 复制。
+            // 这样复制紧贴重新翻译，符合原先定下的规则。
+            buttons.Children.Add(Speak.Control);
+            buttons.Children.Add(Lookup.Control);
             buttons.Children.Add(busy);buttons.Children.Add(Retry.Control);
-            foreach(var b in new[]{Speak,copy,Manual})buttons.Children.Add(b.Control);
-            Speak.Enabled=Retry.Enabled=copy.Enabled=false;
+            buttons.Children.Add(copy.Control);
+            buttons.Children.Add(Manual.Control);
+            Speak.Enabled=Retry.Enabled=copy.Enabled=Lookup.Enabled=false;
             close.Click+=delegate {if(previewMode)window.Close();else Hide();if(Dismissed!=null)Dismissed();};
             copy.Click+=delegate {CopyAll();};copyFeedback.Tick+=delegate {copyFeedback.Stop();copy.Glyph="\uE8C8";copy.Name("复制译文");};
+            Lookup.Click+=delegate {SetLookup(!lookupMode);if(LookupToggled!=null)LookupToggled();};
             var menu=new ContextMenu();var selectionCopy=new MenuItem {Header="复制",Command=ApplicationCommands.Copy,CommandTarget=editor};
             menu.Items.Add(selectionCopy);menu.Items.Add(new MenuItem {Header="全选",Command=ApplicationCommands.SelectAll,CommandTarget=editor});editor.ContextMenu=menu;
             menu.Opened+=delegate {hover.Stop();CloseCard();};
@@ -149,8 +160,8 @@ namespace EnglishCompanion {
             editor.SelectionChanged+=delegate {pet.Pause(dragging||SelectedLength()>0);if(SelectedLength()>0)CloseCard();};
             editor.PreviewMouseWheel+=delegate(object sender,MouseWheelEventArgs e) {CloseCard();scroll.ScrollToVerticalOffset(scroll.VerticalOffset-e.Delta/3.0);e.Handled=true;};
             scroll.ScrollChanged+=delegate {if(!pinned)CloseCard();};
-            Original.Changed=delegate {if(pairing==null)RebuildPlain();};
-            Translation.Changed=delegate {if(pairing==null)RebuildPlain();};
+            Original.Changed=delegate {if(pairing==null&&!dictionaryCard)RebuildPlain();};
+            Translation.Changed=delegate {if(pairing==null&&!dictionaryCard)RebuildPlain();};
             window.SizeChanged+=delegate {if(hasAnchor&&!disposed&&!resizing)Place();};
             window.SourceInitialized+=delegate {
                 var s=HwndSource.FromHwnd(new WindowInteropHelper(window).Handle);s.CompositionTarget.BackgroundColor=Colors.Transparent;
@@ -166,6 +177,7 @@ namespace EnglishCompanion {
         internal void ShowPairs(PairResult result) {
             CloseCard();copyFeedback.Stop();copy.Glyph="\uE8C8";copy.Name("复制译文");
             pairing=result;status.Visibility=Visibility.Collapsed;
+            dictionaryCard=false;
             BuildDocument();scroll.ScrollToTop();Resize(false);Settle();
         }
         // 富文本的真实高度要在窗口完成一次布局后才稳定；此时再对齐一次窗口高度。
@@ -173,7 +185,13 @@ namespace EnglishCompanion {
             if (!window.IsVisible) return;
             window.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, new Action(ResizeLater));
         }
-        void ResizeLater() { if (!disposed) { Resize(false); PumpOnce(); Resize(false); } }
+        void ResizeLater() {
+            // 窗口可能在等待布局期间被关掉；此时不再测量，否则会访问已释放的视觉树。
+            if (disposed || !window.IsVisible) return;
+            Resize(false); PumpOnce();
+            if (disposed || !window.IsVisible) return;
+            Resize(false);
+        }
         // 让 WPF 完成一次布局通道，使下一次测量拿到真实高度。
         void PumpOnce() {
             var frame = new System.Windows.Threading.DispatcherFrame();
@@ -184,6 +202,7 @@ namespace EnglishCompanion {
         }
         // 回到整段排版：提示、错误、听写中与清空都走这条路。
         internal void ClearPairs() {
+            dictionaryCard=false;
             if (pairing==null) return;
             pairing=null;RebuildPlain();
         }
@@ -335,7 +354,47 @@ namespace EnglishCompanion {
         }
         internal void SetTranslatingState() { State = PanelState.Translating; SetTranslating(true); }
         internal void SetPlayback(PlaybackState state,bool word=false) {Speak.SetPlayback(state);wordAudio.SetPlayback(word?state:PlaybackState.Idle);}
-        // 翻译进行中：在重试按钮的位置显示柔和的等待点，不加常驻说明文字。
+        // 查词模式：开着时输入英文直接给音标、词性与释义，不翻译。
+        bool lookupMode;
+        // 文档当前是不是词典卡。是的话，Translation.Text 的赋值不能重建整段排版。
+        bool dictionaryCard;
+        internal bool LookupMode { get { return lookupMode; } }
+        internal void SetLookup(bool value) {
+            lookupMode = value;
+            Lookup.Control.Background = value ? Skin.Brush(Skin.Get(skinId).Hover) : Brushes.Transparent;
+            Lookup.Name(value ? "查词：已开启" : "查词");
+            Lookup.Control.ToolTip = value ? "查词已开启：输入英文直接查音标与词性" : "开启后输入英文直接查词，不再翻译";
+        }
+        // 渲染一张词典卡：音标、词性、释义。查词模式下的主要输出。
+        internal void ShowWordEntries(string word, System.Collections.Generic.List<WordEntry> entries) {
+            CloseCard();copyFeedback.Stop();copy.Glyph="\uE8C8";copy.Name("复制译文");
+            // 词典卡自己占着文档，不能让 Translation.Text 的赋值把它清掉。
+            dictionaryCard=true;
+            pairing=null;status.Visibility=Visibility.Collapsed;
+            document.Blocks.Clear();ranges.Clear();
+            var head=new Paragraph {Margin=new Thickness(0,0,0,6)};
+            head.Inlines.Add(new Run(word) {FontSize=19,FontWeight=FontWeights.SemiBold,FontFamily=new FontFamily("Segoe UI")});
+            document.Blocks.Add(head);Record(head,0,true);
+            if(entries==null||entries.Count==0) {
+                var miss=new Paragraph();
+                miss.Inlines.Add(new Run("本地词典未收录这个词") {FontSize=14,FontFamily=new FontFamily("Microsoft YaHei UI")});
+                document.Blocks.Add(miss);Record(miss,0,true);
+            } else {
+                for(int i=0;i<entries.Count;i++) {
+                    var e=entries[i];
+                    // 一个词可能有多个读音（如 record 名词与动词重音不同），每个读音单独一行。
+                    var line=new Paragraph {Margin=new Thickness(0,0,0,i==entries.Count-1?0:8)};
+                    if(!String.IsNullOrEmpty(e.Phonetic))
+                        line.Inlines.Add(new Run("/"+e.Phonetic+"/  ") {FontSize=14,FontFamily=new FontFamily("Segoe UI")});
+                    if(!String.IsNullOrEmpty(e.PartOfSpeech))
+                        line.Inlines.Add(new Run(e.PartOfSpeech+"  ") {FontSize=13,FontFamily=new FontFamily("Segoe UI")});
+                    line.Inlines.Add(new Run(e.Meaning??"") {FontSize=14,FontFamily=new FontFamily("Microsoft YaHei UI")});
+                    document.Blocks.Add(line);Record(line,i,true);
+                }
+            }
+            Translation.Text = word;
+            scroll.ScrollToTop();Resize(false);Settle();
+        }
         internal void SetTranslating(bool value) {
             if (value) {
                 if (busyDot == null) { busyDot = new BusyIndicator(); busy.Children.Add(busyDot); }
@@ -458,7 +517,8 @@ namespace EnglishCompanion {
             editor.Foreground=Skin.Brush(s.Ink);editor.SelectionBrush=Skin.Brush(s.Focus);scroll.Foreground=Skin.Brush(s.Muted);
             card.Background=Skin.Brush(s.Panel);card.BorderBrush=Skin.Brush(s.FieldEdge);
             wordTitle.Foreground=meaning.Foreground=Skin.Brush(s.Ink);explanation.Foreground=Skin.Brush(s.Muted);pinShape.Stroke=Skin.Brush(s.Ink);
-            foreach(var b in new[]{Speak,fold,copy,Manual,Retry,Settings,close,pin,wordAudio,contextButton,cardClose})b.Control.Foreground=Skin.Brush(s.Ink);
+            foreach(var b in new[]{Speak,fold,copy,Manual,Retry,Settings,close,pin,wordAudio,contextButton,cardClose,Lookup})b.Control.Foreground=Skin.Brush(s.Ink);
+            SetLookup(lookupMode);
             fold.Control.Background=expanded?Skin.Brush(s.Hover):Brushes.Transparent;UpdatePin();
             RestyleDocument();
             Resize(false);

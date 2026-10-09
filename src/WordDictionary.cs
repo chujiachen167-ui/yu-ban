@@ -8,6 +8,9 @@ using System.Web.Script.Serialization;
 namespace EnglishCompanion {
     internal sealed class WordEntry {
         internal string Word, Phonetic, Meaning;
+        // 词性（n. / v. / adj. 等）。ECDICT 的释义本身以词性开头，这里拆出来单独显示，
+        // 查词模式下用户最想先看到的就是词性和读音。
+        internal string PartOfSpeech;
     }
     internal static class WordDictionary {
         static readonly Lazy<Task<Dictionary<string,WordEntry>>> entries=new Lazy<Task<Dictionary<string,WordEntry>>>(delegate {return Task.Run((Func<Dictionary<string,WordEntry>>)Load);});
@@ -23,7 +26,7 @@ namespace EnglishCompanion {
                     string[] a;
                     try { a=json.Deserialize<string[]>(line); } catch { continue; }
                     if(a==null||a.Length<3||String.IsNullOrEmpty(a[0])) continue;
-                    result[Normalize(a[0])]=new WordEntry {Word=a[0],Phonetic=a[1]??"",Meaning=a[2]??""};
+                    result[Normalize(a[0])]=new WordEntry {Word=a[0],Phonetic=a[1]??"",Meaning=a[2]??"",PartOfSpeech=PartOf(a[2])};
                     if(a.Length<4||String.IsNullOrEmpty(a[3])) continue;
                     foreach(var form in a[3].Split('/')) {var p=form.Split(':');if(p.Length==2 && p[0]!="0" && p[0]!="1") foreach(var word in p[1].Split(',')) if(!String.IsNullOrEmpty(word)&&!aliases.ContainsKey(Normalize(word))) aliases[Normalize(word)]=a[0];}
                 }
@@ -43,6 +46,19 @@ namespace EnglishCompanion {
             if (key.IndexOf('-') > 0 && all.TryGetValue(key.Replace("-", ""), out entry)) return entry;
             if (key.IndexOf('’') >= 0 && all.TryGetValue(key.Replace('’', '\''), out entry)) return entry;
             return null;
+        }
+        // 从释义开头取词性标记。ECDICT 的格式形如 "n. 记录\nv. 记录"，取第一个标记即可。
+        // 取不到就返回空，不编造词性。
+        internal static string PartOf(string meaning) {
+            if (String.IsNullOrEmpty(meaning)) return "";
+            string text = meaning.TrimStart();
+            int end = text.IndexOfAny(new[] { ' ', '\n', '\r', '\t' });
+            string token = end < 0 ? text : text.Substring(0, end);
+            if (token.Length < 2 || token.Length > 12) return "";
+            // 只接受以点结尾、由字母与点组成的标记，避免把普通单词当词性。
+            if (!token.EndsWith(".", StringComparison.Ordinal)) return "";
+            foreach (char c in token) if (!Char.IsLetter(c) && c != '.' && c != '&') return "";
+            return token;
         }
         // 统一成与词典一致的形式：全小写、直引号。
         internal static string Normalize(string word) {

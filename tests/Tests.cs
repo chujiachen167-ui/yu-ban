@@ -358,6 +358,76 @@ namespace EnglishCompanion {
             var draft = typeof(SettingsWindow).GetField("draft", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(settings) as Configuration;
             return draft.Language;
         }
+        // 查词模式：只对单个英文词生效，且按钮顺序要符合"复制紧靠重新翻译"。
+        static void LookupModeChecks() {
+            // 什么算"一个英文词"：带空格、中文、标点的输入仍然走翻译。
+            Equal(true, Companion.IsSingleEnglishWord("record"), "a plain word is a lookup");
+            Equal(true, Companion.IsSingleEnglishWord("  record  "), "surrounding spaces are tolerated");
+            Equal(true, Companion.IsSingleEnglishWord("well-known"), "a hyphenated word is a lookup");
+            Equal(true, Companion.IsSingleEnglishWord("don't"), "an apostrophe word is a lookup");
+            Equal(false, Companion.IsSingleEnglishWord("hello guys"), "two words are a sentence, not a lookup");
+            Equal(false, Companion.IsSingleEnglishWord("今天"), "Chinese input is never a lookup word");
+            Equal(false, Companion.IsSingleEnglishWord("record."), "trailing punctuation falls back to translation");
+            Equal(false, Companion.IsSingleEnglishWord(""), "empty input is not a lookup");
+            Equal(false, Companion.IsSingleEnglishWord(new string('a', 60)), "an over-long token is not a lookup");
+            Equal(false, Companion.IsSingleEnglishWord("123"), "digits alone are not a word");
+
+            // 词性拆分：只接受真正的词性标记，不把普通单词当词性。
+            Equal("n.", WordDictionary.PartOf("n. 记录；唱片"), "noun marker is extracted");
+            Equal("v.", WordDictionary.PartOf("v. 记录；录音"), "verb marker is extracted");
+            Equal("adj.", WordDictionary.PartOf("adj. 反直觉的"), "adjective marker is extracted");
+            Equal("", WordDictionary.PartOf("记录；唱片"), "a meaning without a marker yields no part of speech");
+            Equal("", WordDictionary.PartOf(""), "empty meaning yields no part of speech");
+            Equal("", WordDictionary.PartOf("recording"), "a plain word is not mistaken for a marker");
+
+            // 真实词条：查词模式给出的音标与词性必须来自词典，不能编造。
+            var record = WordDictionary.Find("record").GetAwaiter().GetResult();
+            Equal(true, record != null, "record resolves for lookup");
+            Equal(true, record.Phonetic.Length > 0, "record carries a phonetic transcription");
+            Equal(true, WordDictionary.PartOf(record.Meaning).Length > 0, "record carries a part of speech");
+
+            // 按钮顺序：朗读 → 查词 → 重新翻译 → 复制，复制必须紧贴重新翻译。
+            using (var panel = new Overlay(true)) {
+                panel.Follow(new System.Drawing.Rectangle(600, 600, 2, 20)); PumpLayout();
+                var footer = (System.Windows.Controls.Border)typeof(Overlay).GetField("footer", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(panel);
+                var dock = (System.Windows.Controls.DockPanel)footer.Child;
+                var order = new System.Collections.Generic.List<string>();
+                foreach (var child in dock.Children) {
+                    var button = child as System.Windows.Controls.Button;
+                    if (button == null) continue;
+                    order.Add(System.Windows.Automation.AutomationProperties.GetName(button));
+                }
+                int speak = order.IndexOf("朗读"), lookup = order.IndexOf("查词"), retry = order.IndexOf("重新翻译"), copy = order.IndexOf("复制译文");
+                Equal(true, speak >= 0 && lookup >= 0 && retry >= 0 && copy >= 0, "all four footer actions are present");
+                Equal(true, speak < lookup, "read-aloud comes before lookup");
+                Equal(true, lookup < retry, "lookup comes before re-translate");
+                Equal(true, retry < copy, "copy sits next to re-translate as originally specified");
+                // 查词开关默认关闭，状态与命名一致。
+                Equal(false, panel.LookupMode, "lookup starts off");
+                panel.SetLookup(true);
+                Equal(true, panel.LookupMode, "lookup can be switched on");
+                Equal("查词：已开启", System.Windows.Automation.AutomationProperties.GetName((System.Windows.Controls.Button)typeof(Overlay).GetField("Lookup", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public).GetValue(panel).GetType().GetField("Control", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(typeof(Overlay).GetField("Lookup", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public).GetValue(panel))), "an enabled lookup says so for screen readers");
+                // 词典卡渲染：音标与释义都要出现在浮窗里。
+                var list = new System.Collections.Generic.List<WordEntry>();
+                list.Add(new WordEntry { Word = "record", Phonetic = "ˈrekɔːd", PartOfSpeech = "n.", Meaning = "记录；唱片" });
+                list.Add(new WordEntry { Word = "record", Phonetic = "rɪˈkɔːd", PartOfSpeech = "v.", Meaning = "记录；录音" });
+                panel.ShowWordEntries("record", list); PumpLayout();
+                var editor = (System.Windows.Controls.RichTextBox)typeof(Overlay).GetField("editor", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(panel);
+                var blocks = new System.Collections.Generic.List<System.Windows.Documents.Block>();
+                foreach (var b in editor.Document.Blocks) blocks.Add(b);
+                Equal(3, blocks.Count, "a word with two readings renders a heading and two lines");
+                string body = new System.Windows.Documents.TextRange(blocks[1].ContentStart, blocks[1].ContentEnd).Text
+                            + " " + new System.Windows.Documents.TextRange(blocks[2].ContentStart, blocks[2].ContentEnd).Text;
+                Equal(true, body.Contains("ˈrekɔːd"), "the first pronunciation is shown");
+                Equal(true, body.Contains("rɪˈkɔːd"), "the second pronunciation is shown");
+                Equal(true, body.Contains("记录"), "the meaning is shown");
+                // 词不在词典里时不编造释义。
+                panel.ShowWordEntries("zzzznotawordzzzz", new System.Collections.Generic.List<WordEntry>()); PumpLayout();
+                var missBlocks = new System.Collections.Generic.List<System.Windows.Documents.Block>();
+                foreach (var b in editor.Document.Blocks) missBlocks.Add(b);
+                Equal(true, new System.Windows.Documents.TextRange(missBlocks[1].ContentStart, missBlocks[1].ContentEnd).Text.Contains("未收录"), "an unknown word is reported, not invented");
+            }
+        }
         static void LiquidChecks() {            var canvas=new System.Windows.Controls.Canvas();
             var window=new System.Windows.Window {Title="语伴 · 动效检查",Width=820,Height=590,Content=canvas,ShowInTaskbar=false};
             var material=new GlassMist(window,canvas);material.SetEnabled(true);window.Show();PumpLayout();
@@ -709,12 +779,13 @@ namespace EnglishCompanion {
                 CapabilityChecks();
                 KeyRoutingChecks();
                 LearningLanguageChecks();
+                LookupModeChecks();
                 if(Array.IndexOf(args,"--desktop-check")>=0) using(var tray=new TrayIcon(new System.Windows.Forms.ContextMenuStrip(),delegate {},true)) {
                     Equal(true,tray.Registered,"Windows accepts tray registration");
                     Equal(true,tray.HasRectangle(),"Windows exposes tray icon rectangle");
                     using(var overlay=new Overlay(true)) { Equal(false,overlay.Handle==IntPtr.Zero,"overlay initializes before first show"); overlay.Follow(new Rectangle(100,400,2,20)); Equal(true,overlay.Visible,"overlay displays through real HWND"); }
                 }
-                if(Array.IndexOf(args,"--panel-shot")>=0) return PanelShot.Capture(args[Array.IndexOf(args,"--panel-shot")+1]);
+                if(Array.IndexOf(args,"--panel-shot")>=0) { try { return PanelShot.Capture(args[Array.IndexOf(args,"--panel-shot")+1]); } catch(Exception ex) { Console.Error.WriteLine("PanelShot failed: " + ex.ToString()); return 1; } }
                 if(Array.IndexOf(args,"--panel-check")>=0) { PanelLayoutChecks(); PairPanelChecks(); Stage2Checks(); }
                 if(Array.IndexOf(args,"--liquid-check")>=0) LiquidChecks();
                 if(Array.IndexOf(args,"--skin-check")>=0) SkinChecks();

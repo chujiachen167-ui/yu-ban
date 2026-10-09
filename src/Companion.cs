@@ -52,6 +52,12 @@ namespace EnglishCompanion {
             overlay.Manual.Click += delegate {Manual();};
             overlay.Dismissed += delegate { dismissed=owner;StopVoice(); };
             overlay.SpeakWord = async delegate(string word) { if(!demo) await Speak(word); };
+            // 查词开关跟随用户上次的选择，重启后保持。
+            overlay.SetLookup(config.LookupMode);
+            overlay.LookupToggled += delegate {
+                config.LookupMode = overlay.LookupMode;
+                try { config.Save(); } catch { }
+            };
             overlay.ExplainWord = delegate(string word,string sentence,CancellationToken token) { return demo?Task.FromResult("离线演示未调用模型。正式模式下会解释本句中的含义与搭配。"):Services.Explain(config,word,sentence,token); };
             var menu = new ContextMenuStrip();
             menu.Items.Add("设置", null, delegate { OpenSettings(); });
@@ -130,8 +136,48 @@ namespace EnglishCompanion {
             StopVoice(); source = translated = audioText = ""; audio = null;
             overlay.Speak.Enabled = overlay.Retry.Enabled = false;
         }
+        // 查词模式只对"一个英文词"生效：带空格、中文或标点的输入仍走翻译。
+        // 这样开关打开后不会把整句英文也当成查词，用户不用来回切。
+        internal static bool IsSingleEnglishWord(string text) {
+            if (String.IsNullOrWhiteSpace(text)) return false;
+            string value = text.Trim();
+            if (value.Length == 0 || value.Length > 45) return false;
+            int letters = 0;
+            foreach (char c in value) {
+                if (c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z') { letters++; continue; }
+                // 允许词内连字符与撇号，如 well-known、don't。
+                if (c == '-' || c == '\'' || c == '’') continue;
+                return false;
+            }
+            return letters > 0;
+        }
+        // 查词：只读本地词典，安静返回，不弹错误、不联网。
+        async Task LookupWord(string text) {
+            hasContent = true;
+            generation++; int current = generation;
+            source = text.Trim(); translated = source;
+            overlay.Original.Text = "";
+            overlay.SetTranslatingState();
+            try {
+                var entry = await WordDictionary.Find(source);
+                if (current != generation || disposed) return;
+                var list = new System.Collections.Generic.List<WordEntry>();
+                if (entry != null) list.Add(entry);
+                overlay.SetTranslating(false);
+                overlay.ShowWordEntries(source, list);
+                overlay.Learnable = entry != null;
+                overlay.Speak.Enabled = false;
+                overlay.Retry.Enabled = true;
+                translated = entry == null ? "" : entry.Meaning;
+                audio = null; audioText = "";
+            } catch (Exception) {
+                if (current == generation && !disposed) overlay.SetFailed("词典暂不可用，请重试", false);
+            }
+        }
         async Task Translate(string text) {
             if (text.Length == 0) return;
+            // 查词模式：输入单个英文词时直接给音标与词性，不翻译、不联网、不消耗额度。
+            if (overlay.LookupMode && IsSingleEnglishWord(text)) { await LookupWord(text); return; }
             hasContent=true;overlay.Learnable=false;
             generation++; int current = generation;
             if (translationJob != null) { translationJob.Cancel(); translationJob.Dispose(); }

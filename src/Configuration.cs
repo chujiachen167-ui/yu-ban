@@ -22,6 +22,8 @@ namespace EnglishCompanion {
         public Dictionary<string, ModelProfile> SpeechProfiles = new Dictionary<string, ModelProfile>();
         public bool ReuseKey = false, LocalVoice, AutoTyping = true;
         public bool ShowOriginal = true;
+        // 查词模式：打开后输入单个英文词直接给音标与词性，不走翻译。
+        public bool LookupMode = false;
         public int InputVersion;
         public Dictionary<string, string> TranslationKeys = new Dictionary<string, string>();
         public Dictionary<string, string> SpeechKeys = new Dictionary<string, string>();
