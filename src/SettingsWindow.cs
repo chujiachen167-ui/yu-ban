@@ -97,7 +97,10 @@ namespace EnglishCompanion {
             window.Resources["Hover"]=Skin.Brush(skin.Hover);window.Resources["Focus"]=Skin.Brush(skin.Focus);
             translationKey.ApplySkin(skin);speechKey.ApplySkin(skin);
             bool glass=skin.Id=="glass", baby=skin.Id=="baby";
-            Find<Border>("Shell").Background=Skin.Brush(glass?"#40FFFFFF":skin.Surface);
+            // 玻璃皮肤的底色必须足够不透明：它若只有 25% 不透明，桌面上的文字会直接
+            // 穿进界面，和设置页自己的文字叠在一起。玻璃质感由上面的液面层负责，
+            // 不靠"让桌面透进来"表现。
+            Find<Border>("Shell").Background=Skin.Brush(glass?"#FAFCFEFF":skin.Surface);
             Find<Border>("BrandPlate").Visibility=glass?Visibility.Visible:Visibility.Collapsed;
             Find<Border>("BrandPlate").Background=Brushes.Transparent;
             Find<Border>("BrandPlate").Padding=new Thickness(0);

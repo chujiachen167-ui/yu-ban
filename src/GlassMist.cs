@@ -20,7 +20,9 @@ namespace EnglishCompanion {
         internal int FrameCount {get;private set;}
         internal GlassMist(Window window,Canvas canvas) {
             this.window=window;this.canvas=canvas;
-            surface=new Rectangle {IsHitTestVisible=false,Fill=new LinearGradientBrush(Color.FromArgb(180,220,228,239),Color.FromArgb(220,250,252,255),55)};
+            // 液面是设计上的半透明材质，但透明度必须保证底下的文字读不清 —— 否则
+            // 窗口背后有内容时，界面文字会和背景文字叠在一起。
+            surface=new Rectangle {IsHitTestVisible=false,Fill=new LinearGradientBrush(Color.FromArgb(238,220,228,239),Color.FromArgb(246,250,252,255),55)};
             if(RenderCapability.IsPixelShaderVersionSupported(3,0)) {
                 try {effect=new LiquidSurfaceEffect();surface.Fill=Brushes.White;surface.Effect=effect;}
                 catch(InvalidOperationException) { }

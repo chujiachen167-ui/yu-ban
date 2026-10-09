@@ -133,17 +133,73 @@ namespace EnglishCompanion {
                     var root = w.Content as FrameworkElement;
                     var confirm = w.FindName("Confirm") as System.Windows.Controls.Button;
                     double need = root == null ? 0 : root.DesiredSize.Height;
-                    Console.WriteLine("Layout[" + theme + "] window=" + w.ActualHeight
-                        + " contentNeeded=" + Math.Round(need)
-                        + " overflow=" + (need > w.ActualHeight ? "YES(+ " + Math.Round(need - w.ActualHeight) + ")" : "no"));
-                    Shot(w, System.IO.Path.Combine(directory, "settings-" + theme + ".png"), 0);
                     w.Close();
                 }
             }
+            // 玻璃可读性：在窗口背后放一段文字，验证它不会透上来。
+            // 之前每次都在干净背景上截图，所以这个缺陷一直没被发现。
+            var back = new Window { Width = 900, Height = 760, WindowStyle = WindowStyle.None, Left = 60, Top = 60, Background = System.Windows.Media.Brushes.White, ShowInTaskbar = false };
+            {
+                var canvas = new System.Windows.Controls.Canvas { Background = System.Windows.Media.Brushes.White };
+                var text = new System.Windows.Controls.TextBlock {
+                    Text = "背景文字测试 BACKGROUND 背景文字测试 BACKGROUND\n"
+                         + "BACKGROUND 背景文字测试 BACKGROUND 背景文字\n"
+                         + "背 景 文 字 测 试 BACKGROUND 背 景 文 字 测 试\n"
+                         + "BACKGROUND TEXT 背景文字测试 BACKGROUND TEXT",
+                    FontSize = 24, Width = 900, TextWrapping = System.Windows.TextWrapping.Wrap,
+                    Foreground = System.Windows.Media.Brushes.Black
+                };
+                canvas.Children.Add(text);
+                back.Content = canvas;
+                back.Show(); Pump(300);
+                using (var card = new SettingsWindow(new Configuration { Theme = "glass" }, true)) {
+                    var w = typeof(SettingsWindow).GetField("window", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(card) as Window;
+                    w.Left = 100; w.Top = 100; w.Show(); Pump(900);
+                    int ww = (int)Math.Ceiling(w.ActualWidth), hh = (int)Math.Ceiling(w.ActualHeight);
+                    // 先把背后的窗口画进同一张图，再把设置窗口叠上去，还原真实的桌面透字场景。
+                    var backShot = new RenderTargetBitmap(ww, hh, 96, 96, PixelFormats.Pbgra32);
+                    backShot.Render(back);
+                    var layShot = new RenderTargetBitmap(ww, hh, 96, 96, PixelFormats.Pbgra32);
+                    layShot.Render(w);
+                    var comp = new DrawingVisual();
+                    using (var dc = comp.RenderOpen()) {
+                        dc.DrawImage(backShot, new Rect(0, 0, ww, hh));
+                        dc.DrawImage(layShot, new Rect(0, 0, ww, hh));
+                    }
+                    var final = new RenderTargetBitmap(ww, hh, 96, 96, PixelFormats.Pbgra32);
+                    final.Render(comp);
+                    // 判定标准：比较「只有设置窗口」与「设置窗口叠在有文字的背景上」两张同尺寸图。
+                    // 玻璃允许轻微半透明，所以看平均色差，不看有没有差异像素。
+                    long total = 0; int sampled = 0;
+                    byte[] a = new byte[4], b = new byte[4];
+                    for (int y = 180; y < 520; y += 3) {
+                        for (int x = 60; x < 700; x += 3) {
+                            var rect = new System.Windows.Int32Rect(x, y, 1, 1);
+                            layShot.CopyPixels(rect, a, 4, 0);
+                            final.CopyPixels(rect, b, 4, 0);
+                            sampled++;
+                            total += Math.Abs(a[0] - b[0]) + Math.Abs(a[1] - b[1]) + Math.Abs(a[2] - b[2]);
+                        }
+                    }
+                    double mean = sampled == 0 ? 0 : (double)total / sampled;
+                    Console.WriteLine("Glass readability: meanDelta=" + mean.ToString("F1")
+                        + " => " + (mean > 20 ? "TEXT BLEEDS THROUGH" : "cards stay readable"));
+                    var enc = new PngBitmapEncoder();
+                    enc.Frames.Add(BitmapFrame.Create(final));
+                    using (var fs = System.IO.File.Create(System.IO.Path.Combine(directory, "glass-over-text.png"))) enc.Save(fs);
+                    w.Close();
+                }
+                back.Close();
+            }
             // 皮肤插画必须铺满整个窗口：单独量一次，确认它没有被行裁切或拉伸。
-            using (var probe = new SettingsWindow(new Configuration { Theme = "baby" }, true)) {
+            using (var probe = new SettingsWindow(new Configuration { Theme = "glass" }, true)) {
                 var w = typeof(SettingsWindow).GetField("window", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(probe) as Window;
                 w.Left = 40; w.Top = 40; w.Show(); Pump(600);
+                // 液面与插画必须铺满窗口。只量插画是不够的：液面曾经被行容器卡成顶部一条，
+// 下面的卡片失去底色，背后的文字就会透出来 —— 这个缺陷只有量液面才能发现。
+                var mist = (System.Windows.Controls.Canvas)w.FindName("Mist");
+                Console.WriteLine("Mist: actual=" + Math.Round(mist.ActualWidth) + "x" + Math.Round(mist.ActualHeight)
+                    + " coversWindow=" + (mist.ActualHeight >= w.ActualHeight - 4 ? "yes" : "NO — 会透出背后文字"));
                 var art = (System.Windows.Controls.Image)w.FindName("Artwork");
                 Console.WriteLine("Artwork: window=" + w.ActualWidth + "x" + w.ActualHeight
                     + " actual=" + Math.Round(art.ActualWidth) + "x" + Math.Round(art.ActualHeight)
