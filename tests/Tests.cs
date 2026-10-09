@@ -281,8 +281,20 @@ namespace EnglishCompanion {
             var japanese = new Configuration { Language = "Japanese" };
             ProviderProfiles.Prepare(japanese, "千问", true);
             var j = SpeechProfiles.CapabilityOf(japanese);
-            Equal(false, j.Styles && j.Voices, "other target languages get neither styles nor voices");
+            Equal(false, j.Styles && j.Voices, "unsupported target languages get neither styles nor voices");
             Equal(true, j.Reason.Contains("英语"), "the language limit is explained");
+            // 中文：跟随用户选择，可以朗读，但只有平台自带音色，没有英语那套目录。
+            var chinese = new Configuration { Language = "Chinese" };
+            ProviderProfiles.Prepare(chinese, "千问", true);
+            var cn = SpeechProfiles.CapabilityOf(chinese);
+            Equal(true, cn.Voices, "Chinese reading is available once the user picks Chinese");
+            Equal(false, cn.Styles, "the reading styles are English instructions and do not apply to Chinese");
+            Equal(true, SpeechProfiles.Supported(chinese), "Chinese speech is supported");
+            var cnVoices = SpeechProfiles.Catalog(chinese);
+            Equal(2, cnVoices.Count, "Chinese offers only the platform default, not an invented list");
+            // 中文朗读不得下发英文读法与口音指令，否则会把中文念成英语。
+            Equal("", SpeechProfiles.Instruction(chinese), "no English reading instruction is sent for Chinese");
+            Equal("", SpeechProfiles.Guide(chinese), "no English accent instruction is sent for Chinese");
 
             var local = new Configuration { LocalVoice = true };
             Equal(false, SpeechProfiles.CapabilityOf(local).Voices, "system voice offers no vendor voice list");
@@ -313,6 +325,28 @@ namespace EnglishCompanion {
             Equal(true, rejected, "a workspace key is stopped before it reaches the plain endpoint");
             // 反过来：普通 Key 走普通地址不报错。
             Services.ValidateSpeech(new Configuration { SpeechUrl = plain.Url, SpeechModel = "qwen3-tts-flash" }, "sk-plain");
+        }
+        // 语言入口：用户必须能在界面上明确选择自己要学什么。
+        static void LearningLanguageChecks() {
+            using (var settings = new SettingsWindow(new Configuration { Language = "Chinese" }, true)) {
+                var window = typeof(SettingsWindow).GetField("window", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(settings) as System.Windows.Window;
+                window.Show(); PumpLayout(400);
+                var picker = (System.Windows.Controls.ComboBox)window.FindName("LearningLanguage");
+                Equal(true, picker != null, "the settings window has a language entry");
+                Equal(2, picker.Items.Count, "the user can choose English or Chinese");
+                Equal("中文", picker.SelectedItem, "a saved Chinese preference is restored");
+                Equal("Chinese", settings.Result != null ? "Chinese" : SettingsDraftLanguage(settings), "the saved language is carried into the draft");
+                var hint = (System.Windows.Controls.TextBlock)window.FindName("LanguageHint");
+                Equal(true, hint.Text.Contains("中文"), "the hint says which direction will be used");
+                // 切回英语，方向说明跟着变。
+                picker.SelectedIndex = 0; PumpLayout(200);
+                Equal(true, hint.Text.Contains("英文"), "switching to English changes the stated direction");
+                Equal("English", SettingsDraftLanguage(settings), "the draft follows the selection");
+            }
+        }
+        static string SettingsDraftLanguage(SettingsWindow settings) {
+            var draft = typeof(SettingsWindow).GetField("draft", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(settings) as Configuration;
+            return draft.Language;
         }
         static void LiquidChecks() {            var canvas=new System.Windows.Controls.Canvas();
             var window=new System.Windows.Window {Title="语伴 · 动效检查",Width=820,Height=590,Content=canvas,ShowInTaskbar=false};
@@ -664,6 +698,7 @@ namespace EnglishCompanion {
                 ReadingStyleChecks();
                 CapabilityChecks();
                 KeyRoutingChecks();
+                LearningLanguageChecks();
                 if(Array.IndexOf(args,"--desktop-check")>=0) using(var tray=new TrayIcon(new System.Windows.Forms.ContextMenuStrip(),delegate {},true)) {
                     Equal(true,tray.Registered,"Windows accepts tray registration");
                     Equal(true,tray.HasRectangle(),"Windows exposes tray icon rectangle");

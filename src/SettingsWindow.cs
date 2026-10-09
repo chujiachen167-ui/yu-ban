@@ -13,6 +13,11 @@ namespace EnglishCompanion {
         readonly GlassMist mist;
         readonly Configuration draft;
         readonly ComboBox translation, speech, skins;
+        // 学哪种语言：决定翻译方向与朗读语言。放在最上面，因为其它设置都跟着它走。
+        readonly ComboBox learning;
+        static readonly string[] LanguageIds = { "English", "Chinese" };
+        static readonly string[] LanguageNames = { "英语", "中文" };
+        internal readonly TextBlock languageHint;
         readonly KeyEntry translationKey, speechKey;
         readonly TextBlock status;
         readonly System.Collections.Generic.Dictionary<string,string> savedTranslation, savedSpeech;
@@ -30,6 +35,12 @@ namespace EnglishCompanion {
             WindowMaterial.Attach(Find<Border>("Shell"),24);
             mist=new GlassMist(window,Find<Canvas>("Mist"));
             translation=Find<ComboBox>("TranslationProvider"); speech=Find<ComboBox>("SpeechProvider"); skins=Find<ComboBox>("SkinPicker"); status=Find<TextBlock>("Status");
+            learning=Find<ComboBox>("LearningLanguage");languageHint=Find<TextBlock>("LanguageHint");
+            // 语言选择必须显式呈现：用户先说自己学什么，其余设置才有着落。
+            foreach(string name in LanguageNames)learning.Items.Add(name);
+            learning.SelectedItem=draft.Language=="Chinese"?"中文":"英语";
+            learning.SelectionChanged+=delegate { draft.Language=LearningId(); Refresh(); };
+            learning.MinHeight=40;
             translationKey=new KeyEntry("翻译 API Key"); speechKey=new KeyEntry("语音 API Key"); Find<Grid>("TranslationKeyHost").Children.Add(translationKey); Find<Grid>("SpeechKeyHost").Children.Add(speechKey);
             window.Loaded+=delegate { RefreshCardMaterials(); };
             Find<Border>("TranslationCard").SizeChanged+=delegate { RefreshCardMaterials(); };
@@ -65,6 +76,17 @@ namespace EnglishCompanion {
             ApplySkin(); Refresh();
         }
         T Find<T>(string name) where T:class { return (T)window.FindName(name); }
+        string LearningId() { return learning!=null&&learning.SelectedIndex==1?"Chinese":"English"; }
+        // 说清这个选择会带来什么差别，而不是让用户自己猜。
+        void RefreshLanguageHint() {
+            if(languageHint==null)return;
+            bool chinese=LearningId()=="Chinese";
+            var cap=SpeechProfiles.CapabilityOf(draft);
+            string speech=chinese
+                ? (cap.Voices?"朗读会用中文音色。":"当前语音服务商未提供中文音色，可在「模型与接口」调整。")
+                : (cap.Voices?"朗读会用英语音色。":"当前语音服务商未提供英语音色，可在「模型与接口」调整。");
+            languageHint.Text=(chinese?"你写中文或英文，我译成中文。":"你写中文或英文，我译成英文。")+"\n"+speech;
+        }
         void ApplySkin() {
             var skin=Skin.Get(draft.Theme); draft.Theme=skin.Id;
             window.Resources["Ink"]=Skin.Brush(skin.Ink); window.Resources["Muted"]=Skin.Brush(skin.Muted); window.Resources["Accent"]=Skin.Brush(skin.Accent); window.Resources["Panel"]=Skin.Brush(skin.Panel); window.Resources["Edge"]=Skin.Brush(skin.Edge);
@@ -130,6 +152,8 @@ namespace EnglishCompanion {
             speechKey.SetEnabled(currentSpeech!="系统语音");
             SetFeedback("TranslationState",translationKey.Value,ProviderProfiles.Saved(savedTranslation,currentTranslation),false);
             SetFeedback("SpeechState",speechKey.Value,ProviderProfiles.Saved(savedSpeech,currentSpeech),currentSpeech=="系统语音");
+            if(learning!=null)draft.Language=LearningId();
+            RefreshLanguageHint();
         }
         void Save() {
             try {

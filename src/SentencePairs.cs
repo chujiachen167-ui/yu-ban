@@ -50,12 +50,14 @@ namespace EnglishCompanion {
             return han * 2 >= latin ? TextDirection.ChineseToEnglish : TextDirection.EnglishToChinese;
         }
 
-        // 目标语言：设置里写的是"我要学的语言"。用户输入正好就是这个语言时，
-        // 说明他是在拿母语查另一种语言，方向必须取反，否则输入英文却仍译成英文。
+        // 目标语言由用户在设置里显式选择：「我在学」是什么语言，就译成什么语言。
+        // 输入语言与自己学的语言相同时方向取反——那说明他是在拿母语查另一种说法。
+        // 界面上必须能选，所以 Auto 保留为"跟随输入"的选项。
         internal static string TargetLanguage(string configured, TextDirection direction) {
             string fallback = direction == TextDirection.ChineseToEnglish ? "English" : "Chinese";
             if (String.IsNullOrWhiteSpace(configured) || configured.Equals("Auto", StringComparison.OrdinalIgnoreCase)) return fallback;
-            // 配置语言与输入语言相同 → 取反；不同 → 按配置的目标语言译。
+            if (!configured.Equals("Chinese", StringComparison.OrdinalIgnoreCase) && !configured.Equals("English", StringComparison.OrdinalIgnoreCase))
+                return configured;   // 其它语种按用户填写的目标语言译。
             bool inputIsTarget = (direction == TextDirection.ChineseToEnglish && configured.Equals("Chinese", StringComparison.OrdinalIgnoreCase))
                                  || (direction == TextDirection.EnglishToChinese && configured.Equals("English", StringComparison.OrdinalIgnoreCase));
             if (!inputIsTarget) return configured;

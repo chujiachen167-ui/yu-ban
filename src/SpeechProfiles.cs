@@ -21,6 +21,8 @@ namespace EnglishCompanion {
             var list=new List<VoiceOption>();
             list.Add(new VoiceOption("","原有音色"));
             string provider=ProviderProfiles.SpeechProvider(c);
+            // 中文朗读用平台自带音色，没有公开目录，不在这里编造选项。
+            if(c.Language=="Chinese") { list.Add(new VoiceOption(c.Voice,string.IsNullOrEmpty(c.Voice)?"平台默认中文音色":c.Voice,"中文音色由平台提供")); return list; }
             if(provider!="千问") { list.AddRange(GenericVoices(provider,c)); return list; }
             if(c.SpeechModel=="qwen-audio-3.1-tts-flash") {
                 // 官方「精品英文音色」共 15 个，文档只标注性别与口音，没有场景描述，这里不自行编写。
@@ -87,7 +89,13 @@ namespace EnglishCompanion {
             var cap = new Capability();
             string provider = ProviderProfiles.SpeechProvider(c);
             if (c.LocalVoice) { cap.Reason = "系统语音由 Windows 提供，没有可选音色与读法"; return cap; }
-            if (c.Language != "English") { cap.Reason = "当前只对英语朗读提供音色与读法"; return cap; }
+            if (c.Language != "English" && c.Language != "Chinese") { cap.Reason = "当前只对英语与中文朗读提供设置"; return cap; }
+            if (c.Language == "Chinese") {
+                // 中文朗读用平台自带音色，没有公开目录可列。
+                cap.Voices = true;
+                cap.Reason = "中文朗读使用平台自带音色；音色可在「模型与接口」调整";
+                return cap;
+            }
             if (provider == "千问") {
                 if (c.SpeechModel == "qwen-audio-3.1-tts-flash") {
                     cap.Styles = cap.Voices = cap.BritishVoices = true; return cap;
@@ -111,7 +119,9 @@ namespace EnglishCompanion {
             return cap;
         }
         internal static bool Supported(Configuration c) {
-            if(c.LocalVoice||c.Language!="English")return false;
+            // 朗读跟随用户选择的学习语言；音色目录只对英语成立，中文用平台自带音色。
+            if(c.LocalVoice||(c.Language!="English"&&c.Language!="Chinese"))return false;
+            if(c.Language=="Chinese")return true;
             string provider=ProviderProfiles.SpeechProvider(c);
             if(provider=="千问")return c.SpeechModel=="qwen-audio-3.1-tts-flash"||c.SpeechModel=="qwen3-tts-flash";
             return provider=="OpenAI"&&c.SpeechModel=="gpt-4o-mini-tts";
@@ -122,6 +132,8 @@ namespace EnglishCompanion {
         // OpenAI 用 instructions 表达口音、情绪与语速；口音是官方列出的可控项。
         internal static string Guide(Configuration c) {
             if(!Supported(c))return "";
+            // 读法与口音指令都是英文的，中文朗读不下发。
+            if(c.Language!="English")return "";
             if(ProviderProfiles.SpeechProvider(c)!="OpenAI")return "";
             if(c.SpeechStyle=="natural")return "Speak in natural conversational English, as if talking to a friend. Use meaningful phrase pauses and appropriate question intonation. Read only the supplied text.";
             if(c.SpeechStyle=="clear")return "Read in clear English for a language learner. Emphasize important words and pause at phrase boundaries, without reading word by word. Read only the supplied text.";
@@ -129,6 +141,8 @@ namespace EnglishCompanion {
         }
         internal static string Instruction(Configuration c) {
             if(!Supported(c))return "";
+            // 读法指令是英文的，中文朗读不下发，否则会把中文念成英语。
+            if(c.Language!="English")return "";
             // qwen3-tts-flash 只接受 voice，不接受 instruction；只对 3.1 的英语朗读下发。
             if(c.SpeechModel!="qwen-audio-3.1-tts-flash")return "";
             if(c.SpeechStyle=="natural")return "Speak in natural conversational English, as if talking to a friend. Use meaningful phrase pauses, sentence stress, connected speech and appropriate question intonation. Let emotion follow the meaning subtly, without theatrical delivery. Read only the supplied text, without adding or omitting words.";

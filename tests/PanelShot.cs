@@ -123,17 +123,18 @@ namespace EnglishCompanion {
                 Shot(win, System.IO.Path.Combine(directory, "capability-" + (model.Contains("3.1") ? "31" : "30") + ".png"), 0);
                 win.Close(); owner.Close();
             }
+            // 设置页顶部的语言入口：用户在这里决定自己学什么
+            foreach (var lang in new[] { "Chinese", "English" }) {
+                using (var settings = new SettingsWindow(new Configuration { Theme = "glass", Language = lang }, true)) {
+                    var w = typeof(SettingsWindow).GetField("window", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(settings) as Window;
+                    w.Left = 40; w.Top = 40; w.Show();
+                    Pump(700);
+                    Shot(w, System.IO.Path.Combine(directory, "settings-lang-" + lang.ToLowerInvariant() + ".png"), 0);
+                    w.Close();
+                }
+            }
             Console.WriteLine("Panel screenshots written to " + directory);
             return 0;
-            // i 弹窗：确认入口按钮在最上面
-            using (var settings = new SettingsWindow(new Configuration { Theme = "glass" }, true)) {
-                var owner = typeof(SettingsWindow).GetField("window", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(settings) as Window;
-                owner.Show(); Pump(300);
-                var info = (System.Windows.Controls.Button)owner.FindName("SpeechInfo");
-                info.RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
-                Pump(400);
-                owner.Close();
-            }
         }
         static void Pump(int ms = 500) {
             var frame = new System.Windows.Threading.DispatcherFrame();
