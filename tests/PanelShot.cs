@@ -165,7 +165,33 @@ namespace EnglishCompanion {
                     w.Close();
                 }
             }
-            // 玻璃可读性：在窗口背后放一段文字，验证它不会透上来。
+            // 朗读偏好窗口：控件一致性必须和主设置页一样，用户会两个窗口都看。
+            foreach (var theme in new[] { "glass", "baby" }) {
+                using (var owner = new SettingsWindow(new Configuration { Theme = theme }, true)) {
+                    var ow = typeof(SettingsWindow).GetField("window", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(owner) as Window;
+                    ow.Left = 30; ow.Top = 30; ow.Show(); Pump(400);
+                    var cfg = new Configuration { Theme = theme, SpeechModel = "qwen-audio-3.1-tts-flash" };
+                    ProviderProfiles.Prepare(cfg, "千问", true); cfg.SpeechModel = "qwen-audio-3.1-tts-flash";
+                    var options = new SpeechOptionsWindow(ow, cfg);
+                    var sw = typeof(SpeechOptionsWindow).GetField("window", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(options) as Window;
+                    sw.Left = 120; sw.Top = 120; sw.Show(); Pump(700);
+                    foreach (var name in new[] { "style", "voice" }) {
+                        var box = typeof(SpeechOptionsWindow).GetField(name, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(options) as System.Windows.Controls.ComboBox;
+                        if (box == null) continue;
+                        var presenter = FindPresenter(box);
+                        double offset = -1;
+                        if (presenter != null && presenter.ActualHeight > 0) {
+                            double want = box.ActualHeight / 2;
+                            double got = presenter.TranslatePoint(new Point(0, presenter.ActualHeight / 2), box).Y;
+                            offset = Math.Round(Math.Abs(got - want), 1);
+                        }
+                        Console.WriteLine("SpeechOptions[" + theme + "]." + name + " h=" + box.ActualHeight
+                            + " font=" + box.FontSize + " centerOffset=" + (offset < 0 ? "n/a" : offset.ToString()));
+                    }
+                    Shot(sw, System.IO.Path.Combine(directory, "speech-" + theme + ".png"), 0);
+                    sw.Close(); ow.Close();
+                }
+            }
             // 之前每次都在干净背景上截图，所以这个缺陷一直没被发现。
             var back = new Window { Width = 900, Height = 760, WindowStyle = WindowStyle.None, Left = 60, Top = 60, Background = System.Windows.Media.Brushes.White, ShowInTaskbar = false };
             {

@@ -1,6 +1,7 @@
 using System;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using System.Windows.Automation;
 using System.Threading;
 using System.Threading.Tasks;
@@ -19,11 +20,27 @@ namespace EnglishCompanion {
         internal SpeechOptionsWindow(Window owner,Configuration source) {
             config=Probe.Json.Deserialize<Configuration>(Probe.Json.Serialize(source));
             var skin=Skin.Get(source.Theme);
-            window=new Window {Title="语伴 · 朗读偏好",Owner=owner,Width=540,Height=440,ResizeMode=ResizeMode.NoResize,WindowStartupLocation=WindowStartupLocation.CenterOwner,FontFamily=owner.FontFamily,FontSize=14,Foreground=Skin.Brush(skin.Ink),Background=Skin.Brush(skin.Surface),ShowInTaskbar=false};
+            // 与主设置页保持同一套外观：圆角、细边框、同一底色，而不是系统默认直角窗口。
+            window=new Window {Title="语伴 · 朗读偏好",Owner=owner,Width=540,SizeToContent=SizeToContent.Height,ResizeMode=ResizeMode.NoResize,
+                WindowStartupLocation=WindowStartupLocation.CenterOwner,FontFamily=owner.FontFamily,FontSize=14,Foreground=Skin.Brush(skin.Ink),
+                WindowStyle=WindowStyle.None,AllowsTransparency=true,Background=Brushes.Transparent,ShowInTaskbar=false};
             window.Resources=owner.Resources;
+            var shell=new Border {CornerRadius=new CornerRadius(20),BorderThickness=new Thickness(1),
+                Background=Skin.Brush(skin.Id=="glass"?"#FAFCFEFF":skin.Surface),BorderBrush=Skin.Brush(skin.Edge)};
             var layout=new Grid {Margin=new Thickness(26)};
-            foreach(double h in new[]{44.0,96,100,72,48})layout.RowDefinitions.Add(new RowDefinition {Height=new GridLength(h)});
-            layout.Children.Add(new TextBlock {Text="朗读偏好",FontSize=23,FontWeight=FontWeights.SemiBold});
+            foreach(double h in new[]{44.0,96,100,72,52})layout.RowDefinitions.Add(new RowDefinition {Height=new GridLength(h)});
+            shell.Child=layout;
+            // 无边框窗口要自己负责拖动：整块空白区域按住即可移动。
+            shell.MouseLeftButtonDown+=delegate(object sender,System.Windows.Input.MouseButtonEventArgs e) { if(e.OriginalSource==sender) window.DragMove(); };
+            layout.Background=Brushes.Transparent;
+            // 无边框窗口必须自带关闭入口，否则只能用 Alt+F4。
+            var heading=new Grid();
+            var title=new TextBlock {Text="朗读偏好",FontSize=23,FontWeight=FontWeights.SemiBold,VerticalAlignment=VerticalAlignment.Center};
+            var shut=new Button {Content="×",Width=34,Height=34,FontSize=21,HorizontalAlignment=HorizontalAlignment.Right,VerticalAlignment=VerticalAlignment.Center,Background=Brushes.Transparent,BorderThickness=new Thickness(0),Foreground=Skin.Brush(skin.Ink),Cursor=System.Windows.Input.Cursors.Hand};
+            System.Windows.Automation.AutomationProperties.SetName(shut,"关闭朗读偏好");
+            shut.Click+=delegate { window.Close(); };
+            heading.Children.Add(title);heading.Children.Add(shut);
+            layout.Children.Add(heading);
             var controls=new Grid();controls.ColumnDefinitions.Add(new ColumnDefinition());controls.ColumnDefinitions.Add(new ColumnDefinition {Width=new GridLength(16)});controls.ColumnDefinitions.Add(new ColumnDefinition());Grid.SetRow(controls,1);layout.Children.Add(controls);
             var styles=new StackPanel();styles.Children.Add(new TextBlock {Text="读法",Margin=new Thickness(0,0,0,6)});styles.Children.Add(style);controls.Children.Add(styles);
             var voices=new StackPanel();voices.Children.Add(new TextBlock {Text="英语音色",Margin=new Thickness(0,0,0,6)});voices.Children.Add(voice);Grid.SetColumn(voices,2);controls.Children.Add(voices);
@@ -55,7 +72,7 @@ namespace EnglishCompanion {
             style.SelectionChanged+=delegate {Stop();Refresh();};voice.SelectionChanged+=delegate {Stop();Refresh();};
             listen.Click+=async delegate {await Listen();};
             apply.Click+=delegate {ReadSelection();source.SpeechStyle=config.SpeechStyle;source.EnglishVoice=config.EnglishVoice;window.DialogResult=true;};
-            window.Closed+=delegate {closed=true;Stop();};window.Content=layout;Refresh();
+            window.Closed+=delegate {closed=true;Stop();};window.Content=shell;Refresh();
         }
         void ReadSelection() {
             config.SpeechStyle=SpeechProfiles.StyleIds[Math.Max(0,style.SelectedIndex)];
