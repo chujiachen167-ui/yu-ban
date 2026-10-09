@@ -133,6 +133,35 @@ namespace EnglishCompanion {
                     var root = w.Content as FrameworkElement;
                     var confirm = w.FindName("Confirm") as System.Windows.Controls.Button;
                     double need = root == null ? 0 : root.DesiredSize.Height;
+                    var entry = w.FindName("LearningEntry") as System.Windows.Controls.Button;
+                    Console.WriteLine("Layout[" + theme + "] window=" + w.ActualHeight
+                        + " contentNeeded=" + Math.Round(need)
+                        + " overflow=" + (need > w.ActualHeight ? "YES" : "no")
+                        + (entry != null ? " languageEntry=" + entry.ActualHeight + "px/" + ((System.Windows.Controls.TextBlock)w.FindName("LearningLabel")).Text : ""));
+                    Shot(w, System.IO.Path.Combine(directory, "settings-" + theme + ".png"), 0);
+                    // 上拉列表：点开入口，确认它是往上弹而不是被窗口裁掉。
+                    if (theme == "glass") {
+                        entry.RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+                        Pump(500);
+                        double popupTop = double.NaN, entryTop = entry.TranslatePoint(new Point(0, 0), w).Y;
+                        var field = typeof(SettingsWindow).GetField("learningPopup", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                        var popup = field.GetValue(settings) as System.Windows.Controls.Primitives.Popup;
+                        var popupContent = popup == null ? null : popup.Child as FrameworkElement;
+                        if (popupContent != null) {
+                            popupTop = popupContent.TranslatePoint(new Point(0, 0), w).Y;
+                        }
+                        Console.WriteLine("LearningPopup: entryTop=" + Math.Round(entryTop)
+                            + " popupTop=" + (double.IsNaN(popupTop) ? "n/a" : Math.Round(popupTop).ToString())
+                            + " => " + (!double.IsNaN(popupTop) && popupTop < entryTop ? "opens upward (correct)" : "CHECK PLACEMENT"));
+                        if (popupContent != null) {
+                            var enc2 = new PngBitmapEncoder();
+                            var bmp2 = new RenderTargetBitmap(Math.Max(1, (int)Math.Ceiling(popupContent.ActualWidth)), Math.Max(1, (int)Math.Ceiling(popupContent.ActualHeight)), 96, 96, PixelFormats.Pbgra32);
+                            bmp2.Render(popupContent);
+                            enc2.Frames.Add(BitmapFrame.Create(bmp2));
+                            using (var fs2 = System.IO.File.Create(System.IO.Path.Combine(directory, "language-popup.png"))) enc2.Save(fs2);
+                        }
+                        if (popup != null) popup.IsOpen = false;
+                    }
                     w.Close();
                 }
             }
@@ -201,6 +230,8 @@ namespace EnglishCompanion {
                 Console.WriteLine("Mist: actual=" + Math.Round(mist.ActualWidth) + "x" + Math.Round(mist.ActualHeight)
                     + " coversWindow=" + (mist.ActualHeight >= w.ActualHeight - 4 ? "yes" : "NO — 会透出背后文字"));
                 var art = (System.Windows.Controls.Image)w.FindName("Artwork");
+                var entry = w.FindName("LearningEntry") as System.Windows.Controls.Button;
+                if (entry != null) Console.WriteLine("LearningEntry: h=" + entry.ActualHeight + " label=" + ((System.Windows.Controls.TextBlock)w.FindName("LearningLabel")).Text);
                 Console.WriteLine("Artwork: window=" + w.ActualWidth + "x" + w.ActualHeight
                     + " actual=" + Math.Round(art.ActualWidth) + "x" + Math.Round(art.ActualHeight)
                     + " top=" + Math.Round(art.TranslatePoint(new Point(0, 0), w).Y)

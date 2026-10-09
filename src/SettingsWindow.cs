@@ -13,10 +13,11 @@ namespace EnglishCompanion {
         readonly GlassMist mist;
         readonly Configuration draft;
         readonly ComboBox translation, speech, skins;
-        // 学哪种语言：决定翻译方向与朗读语言。放在最上面，因为其它设置都跟着它走。
-        readonly ComboBox learning;
-        static readonly string[] LanguageIds = { "English", "Chinese" };
-        static readonly string[] LanguageNames = { "英语", "中文" };
+        // 「我在学」：一个入口按钮 + 上拉列表。语言以后会变多，所以不做成二元开关。
+        readonly Button learningEntry;
+        readonly TextBlock learningLabel;
+        System.Windows.Controls.Primitives.Popup learningPopup;
+        string learningId = "English";
         internal readonly TextBlock languageHint;
         readonly KeyEntry translationKey, speechKey;
         readonly TextBlock status;
@@ -35,17 +36,15 @@ namespace EnglishCompanion {
             WindowMaterial.Attach(Find<Border>("Shell"),24);
             mist=new GlassMist(window,Find<Canvas>("Mist"));
             translation=Find<ComboBox>("TranslationProvider"); speech=Find<ComboBox>("SpeechProvider"); skins=Find<ComboBox>("SkinPicker"); status=Find<TextBlock>("Status");
-            learning=Find<ComboBox>("LearningLanguage");languageHint=Find<TextBlock>("LanguageHint");
-            // 语言选择必须显式呈现：用户先说自己学什么，其余设置才有着落。
-            foreach(string name in LanguageNames)learning.Items.Add(name);
-            learning.SelectedItem=draft.Language=="Chinese"?"中文":"英语";
-            learning.SelectionChanged+=delegate { draft.Language=LearningId(); Refresh(); };
-            learning.MinHeight=40;
+            learningEntry=Find<Button>("LearningEntry");learningLabel=Find<TextBlock>("LearningLabel");
+            // 语言入口：按钮显示当前选择，点开是上拉列表。
+            learningId=String.IsNullOrEmpty(draft.Language)?"English":draft.Language;
+            learningEntry.Click+=delegate {ToggleLearningPopup();};
+            RefreshLearningLabel();
             translationKey=new KeyEntry("翻译 API Key"); speechKey=new KeyEntry("语音 API Key"); Find<Grid>("TranslationKeyHost").Children.Add(translationKey); Find<Grid>("SpeechKeyHost").Children.Add(speechKey);
             window.Loaded+=delegate { RefreshCardMaterials(); };
             Find<Border>("TranslationCard").SizeChanged+=delegate { RefreshCardMaterials(); };
             Find<Border>("SpeechCard").SizeChanged+=delegate { RefreshCardMaterials(); };
-            Find<Border>("LanguageCard").SizeChanged+=delegate { RefreshCardMaterials(); };
             currentTranslation=ProviderProfiles.TranslationProvider(draft); currentSpeech=ProviderProfiles.SpeechProvider(draft);
             foreach(var provider in ProviderProfiles.Translation)translation.Items.Add(provider.Name);if(currentTranslation=="原有配置")translation.Items.Add(currentTranslation);
             foreach(var provider in ProviderProfiles.Speech)speech.Items.Add(provider.Name);if(currentSpeech=="原有配置")speech.Items.Add(currentSpeech);speech.Items.Add("系统语音");
@@ -77,7 +76,35 @@ namespace EnglishCompanion {
             ApplySkin(); Refresh();
         }
         T Find<T>(string name) where T:class { return (T)window.FindName(name); }
-        string LearningId() { return learning!=null&&learning.SelectedIndex==1?"Chinese":"English"; }
+        string LearningId() { return learningId; }
+        void RefreshLearningLabel() {
+            learningLabel.Text = LearningLanguages.LabelOf(learningId);
+            var target = LearningLanguages.Find(learningId);
+            learningEntry.ToolTip = target == null ? "选择要学的语言" : target.Hint;
+            RefreshLanguageHint();
+        }
+        // 上拉列表：语言以后会增加，这里按目录生成，加语言只需改 LearningLanguages。
+        void ToggleLearningPopup() {
+            if(learningPopup!=null&&learningPopup.IsOpen){learningPopup.IsOpen=false;return;}
+            var panel=new StackPanel {Margin=new Thickness(6)};
+            foreach(var target in LearningLanguages.Available()) {
+                var item=new Button {Content=target.Label,Padding=new Thickness(14,10,14,10),HorizontalContentAlignment=HorizontalAlignment.Left,
+                    Background=target.Id==learningId?Skin.Brush(Skin.Get(draft.Theme).Hover):Brushes.Transparent,FontSize=15};
+                string id=target.Id;
+                item.ToolTip=target.Hint;
+                item.Click+=delegate {
+                    learningId=id;draft.Language=id;if(learningPopup!=null)learningPopup.IsOpen=false;
+                    RefreshLearningLabel();Refresh();
+                };
+                panel.Children.Add(item);
+            }
+            var border=new Border {Background=Skin.Brush(Skin.Get(draft.Theme).Panel),BorderBrush=Skin.Brush(Skin.Get(draft.Theme).Edge),
+                BorderThickness=new Thickness(1),CornerRadius=new CornerRadius(12),MinWidth=learningEntry.ActualWidth,Child=panel};
+            learningPopup=new System.Windows.Controls.Primitives.Popup {Child=border,PlacementTarget=learningEntry,
+                Placement=System.Windows.Controls.Primitives.PlacementMode.Top,AllowsTransparency=true,StaysOpen=false,
+                HorizontalOffset=0,VerticalOffset=-6};
+            learningPopup.IsOpen=true;
+        }
         // 位置回到 Key 卡下方，可以把话说完整：告诉用户这个选择会带来什么。
         void RefreshLanguageHint() {
             if(languageHint==null)return;
@@ -124,7 +151,6 @@ namespace EnglishCompanion {
             var skin=Skin.Get(draft.Theme);
             ApplyCardMaterial("TranslationCard","TranslationProvider","TranslationKeyHost",skin);
             ApplyCardMaterial("SpeechCard","SpeechProvider","SpeechKeyHost",skin);
-            ApplyCardMaterial("LanguageCard","LearningLanguage","LanguageHint",skin);
         }
         void ApplyCardMaterial(string cardName,string providerName,string keyName,Skin skin) {
             var card=Find<Border>(cardName);
@@ -158,7 +184,7 @@ namespace EnglishCompanion {
             speechKey.SetEnabled(currentSpeech!="系统语音");
             SetFeedback("TranslationState",translationKey.Value,ProviderProfiles.Saved(savedTranslation,currentTranslation),false);
             SetFeedback("SpeechState",speechKey.Value,ProviderProfiles.Saved(savedSpeech,currentSpeech),currentSpeech=="系统语音");
-            if(learning!=null)draft.Language=LearningId();
+            draft.Language=LearningId();
             RefreshLanguageHint();
         }
         void Save() {

@@ -63,26 +63,28 @@
       <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="190"/><ColumnDefinition Width="14"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><ComboBox x:Name="SpeechProvider" VerticalContentAlignment="Center" AutomationProperties.Name="语音服务商"/><Grid x:Name="SpeechKeyHost" Grid.Column="2"/></Grid>
      </StackPanel>
     </Border>
-    <!-- 学哪种语言：放在两张 Key 卡之下的空白处，不与它们争夺注意力，也不空着。 -->
-    <Border x:Name="LanguageCard" CornerRadius="20" BorderBrush="{DynamicResource Edge}" BorderThickness="1" Padding="20,13,20,15" Margin="0,14,0,0" VerticalAlignment="Top">
-     <StackPanel>
-      <TextBlock Text="我在学" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,10"/>
-      <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="190"/><ColumnDefinition Width="14"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-       <ComboBox x:Name="LearningLanguage" VerticalContentAlignment="Center" AutomationProperties.Name="选择要学的语言" ToolTip="决定翻译方向与朗读语言"/>
-       <TextBlock x:Name="LanguageHint" Grid.Column="2" Foreground="{DynamicResource Muted}" FontSize="13" VerticalAlignment="Center" TextWrapping="Wrap"/>
-      </Grid>
-     </StackPanel>
-    </Border>
    </StackPanel>
   </ScrollViewer>
    <Grid Grid.Row="2" Height="58" Margin="42,0,42,24">
-    <Grid.ColumnDefinitions><ColumnDefinition Width="260"/><ColumnDefinition Width="*"/><ColumnDefinition Width="140"/></Grid.ColumnDefinitions>
+    <Grid.ColumnDefinitions><ColumnDefinition Width="260"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="140"/></Grid.ColumnDefinitions>
     <Border Background="{DynamicResource SettingsPanel}" CornerRadius="12" Padding="12,10" HorizontalAlignment="Left" VerticalAlignment="Center"><StackPanel Orientation="Horizontal">
      <RadioButton x:Name="Bilingual" Content="双语对照" GroupName="DisplayMode" Foreground="{DynamicResource Ink}" VerticalContentAlignment="Center" Margin="0,0,18,0"/>
      <RadioButton x:Name="TranslationOnly" Content="仅显示译文" GroupName="DisplayMode" Foreground="{DynamicResource Ink}" VerticalContentAlignment="Center"/>
     </StackPanel></Border>
-    <TextBlock x:Name="Status" Grid.Column="1" Visibility="Collapsed" Foreground="#BC3347" FontSize="12" VerticalAlignment="Center" Margin="10,0,16,0" TextWrapping="Wrap" HorizontalAlignment="Left"/>
-    <Button x:Name="Confirm" Grid.Column="2" Content="确认  →" Width="140" Height="48" Background="{DynamicResource Accent}" Foreground="{DynamicResource ButtonInk}" FontWeight="SemiBold" FontSize="17" HorizontalAlignment="Right" IsDefault="True"/>
+    <!-- 学习语言的入口：一个按钮，点开是上拉列表。
+         语言以后会变多，所以做成可扩展入口，而不是二元开关；
+         位置在窗口底部，因此往上弹，避免被窗口裁掉。 -->
+    <Button x:Name="LearningEntry" Grid.Column="1" Height="40" Margin="14,0,0,0" Padding="14,0" VerticalAlignment="Center"
+            Background="{DynamicResource SettingsPanel}" BorderBrush="{DynamicResource Edge}" BorderThickness="1"
+            AutomationProperties.Name="选择要学的语言" ToolTip="决定翻译方向与朗读语言">
+     <StackPanel Orientation="Horizontal">
+      <TextBlock Text="我在学" Foreground="{DynamicResource Muted}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+      <TextBlock x:Name="LearningLabel" Foreground="{DynamicResource Ink}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+      <Path Data="M 0 0 L 4 4 L 8 0" Stroke="{DynamicResource Muted}" StrokeThickness="1.5" VerticalAlignment="Center" Margin="9,2,0,0"/>
+     </StackPanel>
+    </Button>
+    <TextBlock x:Name="Status" Grid.Column="2" Visibility="Collapsed" Foreground="#BC3347" FontSize="12" VerticalAlignment="Center" Margin="14,0,16,0" TextWrapping="Wrap" HorizontalAlignment="Left"/>
+    <Button x:Name="Confirm" Grid.Column="3" Content="确认  →" Width="140" Height="48" Background="{DynamicResource Accent}" Foreground="{DynamicResource ButtonInk}" FontWeight="SemiBold" FontSize="17" HorizontalAlignment="Right" IsDefault="True"/>
    </Grid>
   </Grid>
  </Border>

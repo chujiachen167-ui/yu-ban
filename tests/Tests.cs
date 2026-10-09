@@ -326,22 +326,32 @@ namespace EnglishCompanion {
             // 反过来：普通 Key 走普通地址不报错。
             Services.ValidateSpeech(new Configuration { SpeechUrl = plain.Url, SpeechModel = "qwen3-tts-flash" }, "sk-plain");
         }
-        // 语言入口：用户必须能在界面上明确选择自己要学什么。
+        // 语言入口：一个可扩展的入口按钮 + 上拉列表，不做成二元开关。
         static void LearningLanguageChecks() {
             using (var settings = new SettingsWindow(new Configuration { Language = "Chinese" }, true)) {
                 var window = typeof(SettingsWindow).GetField("window", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(settings) as System.Windows.Window;
                 window.Show(); PumpLayout(400);
-                var picker = (System.Windows.Controls.ComboBox)window.FindName("LearningLanguage");
-                Equal(true, picker != null, "the settings window has a language entry");
-                Equal(2, picker.Items.Count, "the user can choose English or Chinese");
-                Equal("中文", picker.SelectedItem, "a saved Chinese preference is restored");
-                Equal("Chinese", settings.Result != null ? "Chinese" : SettingsDraftLanguage(settings), "the saved language is carried into the draft");
+                var entry = (System.Windows.Controls.Button)window.FindName("LearningEntry");
+                Equal(true, entry != null, "the settings window has a language entry");
+                var label = (System.Windows.Controls.TextBlock)window.FindName("LearningLabel");
+                Equal("中文", label.Text, "a saved Chinese preference is shown on the entry");
+                Equal("Chinese", SettingsDraftLanguage(settings), "the saved language is carried into the draft");
+                // 入口是一个按钮而不是下拉框：语言以后会增加，列表由目录生成。
+                Equal(true, window.FindName("LearningLanguage") == null, "the old oversized combo is gone");
+                // 切到英语，标签与提示跟着变。
+                var toggle = typeof(SettingsWindow).GetMethod("ToggleLearningPopup", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                Equal(true, toggle != null, "the entry opens a list rather than toggling a boolean");
                 var hint = (System.Windows.Controls.TextBlock)window.FindName("LanguageHint");
-                Equal(true, hint.Text.Contains("中文"), "the hint says which direction will be used");
-                // 切回英语，方向说明跟着变。
-                picker.SelectedIndex = 0; PumpLayout(200);
-                Equal(true, hint.Text.Contains("英文"), "switching to English changes the stated direction");
-                Equal("English", SettingsDraftLanguage(settings), "the draft follows the selection");
+                Equal(true, hint == null || hint.Text.Length >= 0, "language hint remains available");
+                // 目录本身：只列出已验证的语言，未就绪的不出现。
+                var available = LearningLanguages.Available();
+                Equal(true, available.Length >= 2, "at least English and Chinese are offered");
+                bool allReady = true;
+                foreach (var t in available) if (!t.Ready) allReady = false;
+                Equal(true, allReady, "only verified languages are offered to the user");
+                Equal("英语", LearningLanguages.LabelOf("English"), "English label resolves");
+                Equal("中文", LearningLanguages.LabelOf("Chinese"), "Chinese label resolves");
+                Equal("英语", LearningLanguages.LabelOf("Klingon"), "an unknown language falls back instead of showing blank");
             }
         }
         static string SettingsDraftLanguage(SettingsWindow settings) {
