@@ -39,4 +39,23 @@ if ($args -contains '-Diag') {
     & $compiler @compilerOptions /nologo /optimize+ /platform:x64 /target:exe /main:EnglishCompanion.TrayDiagnostics ('/out:' + (Join-Path $outDir 'CompanionTrayDiag.exe')) @references (Join-Path $base 'src\TrayDiagnostics.cs') (Join-Path $base 'src\AppIcon.cs')
     if ($LASTEXITCODE -ne 0) { throw 'Tray diagnostic build failed' }
 }
+# Deploy: install the fresh build locally and verify by hash.
+# This used to rely on remembering; once it was skipped and the user reviewed a stale build.
+if ($args -contains '-Deploy') {
+    $target = Join-Path $env:LOCALAPPDATA 'Programs\EnglishCompanion'
+    if (Test-Path $target) {
+        Get-Process -Name EnglishCompanion,CompanionProbe,CompanionVoice -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 2
+        foreach ($name in @('EnglishCompanion.exe','CompanionProbe.exe','CompanionVoice.exe')) {
+            $from = Join-Path $outDir $name
+            if (Test-Path $from) { Copy-Item $from (Join-Path $target $name) -Force }
+        }
+        $installed = (Get-FileHash (Join-Path $target 'EnglishCompanion.exe') -Algorithm SHA256).Hash
+        $built = (Get-FileHash (Join-Path $outDir 'EnglishCompanion.exe') -Algorithm SHA256).Hash
+        if ($installed -ne $built) { throw "Deploy verification failed: installed $installed != built $built" }
+        Write-Host ("Deployed and verified: " + $installed.Substring(0,16))
+    } else {
+        Write-Host 'Install directory not found; skipped deploy.'
+    }
+}
 Get-Item (Join-Path $outDir 'EnglishCompanion.exe') | Select-Object Name, Length

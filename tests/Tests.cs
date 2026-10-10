@@ -465,6 +465,44 @@ namespace EnglishCompanion {
                 Equal(true, new System.Windows.Documents.TextRange(missBlocks[1].ContentStart, missBlocks[1].ContentEnd).Text.Contains("未收录"), "an unknown word is reported, not invented");
             }
         }
+        // 设置窗口的选择必须真的传到保存的配置里 —— 用户怀疑这一层断了。
+        static void SettingsPropagationChecks() {
+            // 预览模式不落盘，所以这里直接验 draft：它是保存与不保存共用的那份数据。
+            using (var settings = new SettingsWindow(new Configuration { Language = "English" }, true)) {
+                var window = typeof(SettingsWindow).GetField("window", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(settings) as System.Windows.Window;
+                window.Show(); PumpLayout(300);
+                var draft = typeof(SettingsWindow).GetField("draft", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(settings) as Configuration;
+                Equal("English", draft.Language, "opening with English keeps English in the draft");
+                // 模拟用户在上拉列表里选中文。
+                var learningId = typeof(SettingsWindow).GetField("learningId", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                learningId.SetValue(settings, "Chinese");
+                draft.Language = "Chinese";
+                // 点确认：即使 preview 不落盘，也要走完同一套读取与校验。
+                var save = typeof(SettingsWindow).GetMethod("Save", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                save.Invoke(settings, null);
+                Equal(true, settings.Result != null, "confirming produces a result configuration");
+                Equal("Chinese", settings.Result.Language, "the chosen learning language survives the save path");
+                window.Close();
+            }
+            // 反向：改成英语也同样传到结果里。
+            using (var settings = new SettingsWindow(new Configuration { Language = "Chinese" }, true)) {
+                var window = typeof(SettingsWindow).GetField("window", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(settings) as System.Windows.Window;
+                window.Show(); PumpLayout(300);
+                var draft = typeof(SettingsWindow).GetField("draft", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(settings) as Configuration;
+                var learningId = typeof(SettingsWindow).GetField("learningId", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                learningId.SetValue(settings, "English");
+                draft.Language = "English";
+                var save = typeof(SettingsWindow).GetMethod("Save", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                save.Invoke(settings, null);
+                Equal(true, settings.Result != null, "confirming a switch back also produces a result");
+                Equal("English", settings.Result.Language, "switching back to English also survives");
+                window.Close();
+            }
+            // 配置能往返：Language 与 LookupMode 都要能存下来再读回。
+            var round = Probe.Json.Deserialize<Configuration>(Probe.Json.Serialize(new Configuration { Language = "Chinese", LookupMode = true }));
+            Equal("Chinese", round.Language, "the learning language round-trips through the config file");
+            Equal(true, round.LookupMode, "the lookup switch round-trips through the config file");
+        }
         static void LiquidChecks() {            var canvas=new System.Windows.Controls.Canvas();
             var window=new System.Windows.Window {Title="语伴 · 动效检查",Width=820,Height=590,Content=canvas,ShowInTaskbar=false};
             var material=new GlassMist(window,canvas);material.SetEnabled(true);window.Show();PumpLayout();
@@ -817,6 +855,7 @@ namespace EnglishCompanion {
                 KeyRoutingChecks();
                 LearningLanguageChecks();
                 LookupModeChecks();
+                SettingsPropagationChecks();
                 if(Array.IndexOf(args,"--desktop-check")>=0) using(var tray=new TrayIcon(new System.Windows.Forms.ContextMenuStrip(),delegate {},true)) {
                     Equal(true,tray.Registered,"Windows accepts tray registration");
                     Equal(true,tray.HasRectangle(),"Windows exposes tray icon rectangle");
