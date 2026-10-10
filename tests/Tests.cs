@@ -372,6 +372,33 @@ namespace EnglishCompanion {
             Equal(false, Companion.IsSingleEnglishWord(new string('a', 60)), "an over-long token is not a lookup");
             Equal(false, Companion.IsSingleEnglishWord("123"), "digits alone are not a word");
 
+            // 查词规则：只对"你正在学的那种语言的单个词"生效。
+            // 学英语查英文词，学中文查中文词；短语和另一种语言都走翻译。
+            Equal(true, Companion.IsSingleWord("beauty", "English"), "learning English: a lone English word is looked up");
+            Equal(false, Companion.IsSingleWord("beautiful day", "English"), "learning English: a phrase is translated, not looked up");
+            Equal(false, Companion.IsSingleWord("今天天气不错", "English"), "learning English: Chinese input is translated");
+            Equal(false, Companion.IsSingleWord("我今天用了 beauty", "English"), "mixed input is translated");
+            Equal(true, Companion.IsSingleWord("美丽", "Chinese"), "learning Chinese: a lone Chinese word is looked up");
+            Equal(true, Companion.IsSingleWord("走", "Chinese"), "learning Chinese: a single character counts as a word");
+            Equal(false, Companion.IsSingleWord("你好吗今天", "Chinese"), "learning Chinese: a run the dictionary does not know falls back to translation");
+            Equal(false, Companion.IsSingleWord("beauty", "Chinese"), "learning Chinese: English input is translated");
+            Equal(false, Companion.IsSingleWord("", "English"), "empty input is never a lookup");
+
+            // 中文词典：拼音与英文释义必须来自数据。
+            var meili = WordDictionary.FindChinese("美丽").GetAwaiter().GetResult();
+            Equal(true, meili != null, "the Chinese dictionary resolves 美丽");
+            Equal(true, meili.Phonetic.Contains("měi"), "pinyin carries tone marks, not numbers");
+            Equal(true, meili.Meaning.ToLowerInvariant().Contains("beautiful"), "the English gloss is present");
+            var nihao = WordDictionary.FindChinese("你好").GetAwaiter().GetResult();
+            Equal(true, nihao != null && nihao.Phonetic.Contains("nǐ"), "你好 resolves with marked pinyin");
+            // 繁体写法也能查到，指向同一条目。
+            Equal(true, WordDictionary.FindChinese("電腦").GetAwaiter().GetResult() != null, "traditional forms resolve too");
+            Equal<WordEntry>(null, WordDictionary.FindChinese("zzzznotaword").GetAwaiter().GetResult(), "an unknown Chinese word is not invented");
+            // 中文词典不该把英文词卷进来，反之亦然。
+            Equal<WordEntry>(null, WordDictionary.FindChinese("beauty").GetAwaiter().GetResult(), "the Chinese dictionary does not answer English words");
+            Equal(true, WordDictionary.Find("beauty").GetAwaiter().GetResult() != null, "the English dictionary still answers English words");
+            Equal<WordEntry>(null, WordDictionary.Find("美丽").GetAwaiter().GetResult(), "the English dictionary does not answer Chinese words");
+
             // 词性拆分：只接受真正的词性标记，不把普通单词当词性。
             Equal("n.", WordDictionary.PartOf("n. 记录；唱片"), "noun marker is extracted");
             Equal("v.", WordDictionary.PartOf("v. 记录；录音"), "verb marker is extracted");

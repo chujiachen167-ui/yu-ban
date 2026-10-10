@@ -57,6 +57,10 @@ namespace EnglishCompanion {
             overlay.LookupToggled += delegate {
                 config.LookupMode = overlay.LookupMode;
                 try { config.Save(); } catch { }
+                // 打开查词时立刻处理屏幕上已有的内容，否则用户点了看不到任何变化。
+                if (overlay.LookupMode && source.Length > 0 && IsSingleWord(source, config.Language)) {
+                    var task = LookupWord(source);
+                }
             };
             overlay.ExplainWord = delegate(string word,string sentence,CancellationToken token) { return demo?Task.FromResult("离线演示未调用模型。正式模式下会解释本句中的含义与搭配。"):Services.Explain(config,word,sentence,token); };
             var menu = new ContextMenuStrip();
@@ -137,7 +141,15 @@ namespace EnglishCompanion {
             overlay.Speak.Enabled = overlay.Retry.Enabled = false;
         }
         // 查词模式只对"一个英文词"生效：带空格、中文或标点的输入仍走翻译。
-        // 这样开关打开后不会把整句英文也当成查词，用户不用来回切。
+        // 查词只对"你正在学的那种语言的单个词"生效。
+        // 学英语时查英文词，学中文时查中文词；短语、另一种语言、中英夹杂都走翻译。
+        // 这样开关不会把整句当成查词，用户也不用先想清楚该不该点。
+        internal static bool IsSingleWord(string text, string learning) {
+            if (String.IsNullOrWhiteSpace(text)) return false;
+            string value = text.Trim();
+            if (value.Length == 0 || value.Length > 45) return false;
+            return learning == "Chinese" ? ChineseWordExists(value) : IsSingleEnglishWord(value);
+        }
         internal static bool IsSingleEnglishWord(string text) {
             if (String.IsNullOrWhiteSpace(text)) return false;
             string value = text.Trim();
@@ -151,24 +163,39 @@ namespace EnglishCompanion {
             }
             return letters > 0;
         }
+        // 中文词：纯汉字。长度只是粗筛，真正的判据是词典里有没有这个词条 ——
+        // 「你好吗今天」虽然也是 5 个汉字，但词典里没有，就该当句子去翻译。
+        internal static bool IsSingleChineseWord(string text) {
+            if (String.IsNullOrWhiteSpace(text)) return false;
+            string value = text.Trim();
+            if (value.Length == 0 || value.Length > 8) return false;
+            foreach (char c in value) if (c < 0x4E00 || c > 0x9FFF) return false;
+            return true;
+        }
+        // 含汉字且词典能查到，才真正按查词处理。查不到就交给翻译，让用户拿到有用的结果。
+        internal static bool ChineseWordExists(string text) {
+            if (!IsSingleChineseWord(text)) return false;
+            return WordDictionary.FindChinese(text.Trim()).GetAwaiter().GetResult() != null;
+        }
         // 查词：只读本地词典，安静返回，不弹错误、不联网。
         async Task LookupWord(string text) {
             hasContent = true;
             generation++; int current = generation;
+            bool chinese = config.Language == "Chinese";
             source = text.Trim(); translated = source;
             overlay.Original.Text = "";
             overlay.SetTranslatingState();
             try {
-                var entry = await WordDictionary.Find(source);
+                var entry = chinese ? await WordDictionary.FindChinese(source) : await WordDictionary.Find(source);
                 if (current != generation || disposed) return;
                 var list = new System.Collections.Generic.List<WordEntry>();
                 if (entry != null) list.Add(entry);
                 overlay.SetTranslating(false);
                 overlay.ShowWordEntries(source, list);
                 overlay.Learnable = entry != null;
-                overlay.Speak.Enabled = false;
-                overlay.Retry.Enabled = true;
-                translated = entry == null ? "" : entry.Meaning;
+                // 查词模式下朗读的就是这个词本身，音标和重音正是用户要听的东西。
+                translated = entry == null ? source : source;
+                overlay.Speak.Enabled = entry != null && !demo;
                 audio = null; audioText = "";
             } catch (Exception) {
                 if (current == generation && !disposed) overlay.SetFailed("词典暂不可用，请重试", false);
@@ -176,8 +203,8 @@ namespace EnglishCompanion {
         }
         async Task Translate(string text) {
             if (text.Length == 0) return;
-            // 查词模式：输入单个英文词时直接给音标与词性，不翻译、不联网、不消耗额度。
-            if (overlay.LookupMode && IsSingleEnglishWord(text)) { await LookupWord(text); return; }
+            // 查词模式：输入词恰好是你正在学的那种语言的单个词时直接查词典，不翻译、不联网。
+            if (overlay.LookupMode && IsSingleWord(text, config.Language)) { await LookupWord(text); return; }
             hasContent=true;overlay.Learnable=false;
             generation++; int current = generation;
             if (translationJob != null) { translationJob.Cancel(); translationJob.Dispose(); }

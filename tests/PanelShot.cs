@@ -321,6 +321,16 @@ namespace EnglishCompanion {
                 panel.ShowWordEntries("zzzznotawordzzzz", new System.Collections.Generic.List<WordEntry>());
                 Pump(500);
                 if (lw != null) Shot(lw, System.IO.Path.Combine(directory, "lookup-miss.png"), 0);
+                // 学中文时的查词：拼音在上，英文释义在下。
+                var zh = WordDictionary.FindChinese("美丽").GetAwaiter().GetResult();
+                if (zh != null) {
+                    var zhList = new System.Collections.Generic.List<WordEntry>();
+                    zhList.Add(zh);
+                    panel.ShowWordEntries("美丽", zhList);
+                    panel.SetLookup(true);
+                    Pump(500);
+                    if (lw != null) Shot(lw, System.IO.Path.Combine(directory, "lookup-chinese.png"), 0);
+                }
                 var footerField = typeof(Overlay).GetField("footer", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
                 var footer = footerField == null ? null : footerField.GetValue(panel) as System.Windows.Controls.Border;
                 if (footer != null) {

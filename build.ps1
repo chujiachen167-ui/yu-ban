@@ -16,6 +16,7 @@ $references += '/resource:' + (Join-Path $base 'assets\pet-atlas.png') + ',Engli
 $references += '/win32icon:' + (Join-Path $base 'assets\companion.ico')
 $references += '/resource:' + (Join-Path $base 'assets\companion.ico') + ',EnglishCompanion.Icon.ico'
 $references += '/resource:' + (Join-Path $base 'assets\dictionary\words.jsonl.gz') + ',EnglishCompanion.Dictionary.gz'
+$references += '/resource:' + (Join-Path $base 'assets\dictionary\chinese.jsonl.gz') + ',EnglishCompanion.ChineseDictionary.gz'
 & (Join-Path $base 'assets\liquid\compile.ps1')
 $references += '/resource:' + (Join-Path $base 'assets\liquid\LiquidSurface.ps') + ',EnglishCompanion.LiquidSurface.ps'
 $sources = @(Get-ChildItem -LiteralPath (Join-Path $base 'src') -Filter '*.cs' | ForEach-Object FullName)

@@ -34,6 +34,34 @@ namespace EnglishCompanion {
             foreach(var pair in aliases) if(!result.ContainsKey(pair.Key)) result[pair.Key]=result[Normalize(pair.Value)];
             return result;
         }
+        // 中文词典：CC-CEDICT，与英文词典同构，因此共用一套读取与查询逻辑。
+        static readonly Lazy<Task<Dictionary<string,WordEntry>>> chinese = new Lazy<Task<Dictionary<string,WordEntry>>>(delegate { return Task.Run((Func<Dictionary<string,WordEntry>>)LoadChinese); });
+        internal static Dictionary<string,WordEntry> LoadChinese() {
+            var result = new Dictionary<string,WordEntry>(StringComparer.Ordinal);
+            var json = new JavaScriptSerializer();
+            using (var raw = Assembly.GetExecutingAssembly().GetManifestResourceStream("EnglishCompanion.ChineseDictionary.gz"))
+            using (var zip = new GZipStream(raw, CompressionMode.Decompress))
+            using (var reader = new StreamReader(zip, System.Text.Encoding.UTF8)) {
+                string line;
+                while ((line = reader.ReadLine()) != null) {
+                    string[] a;
+                    try { a = json.Deserialize<string[]>(line); } catch { continue; }
+                    if (a == null || a.Length < 3 || String.IsNullOrEmpty(a[0])) continue;
+                    // 中文按原样匹配，不做大小写折叠；拼音单独给一行。
+                    result[a[0]] = new WordEntry { Word = a[0], Phonetic = a[1] ?? "", Meaning = a[2] ?? "", PartOfSpeech = "" };
+                }
+            }
+            return result;
+        }
+        // 查中文词。含汉字才走这里；一个词的多种写法（繁简）在生成时已补齐。
+        internal static async Task<WordEntry> FindChinese(string word) {
+            if (String.IsNullOrWhiteSpace(word)) return null;
+            var all = await chinese.Value.ConfigureAwait(false);
+            WordEntry entry;
+            string key = word.Trim();
+            if (all.TryGetValue(key, out entry)) return entry;
+            return null;
+        }
         // 查询要容错：浮窗取词可能带空格、连字符或弯引号，大小写也要能命中。
         internal static async Task<WordEntry> Find(string word) {
             if (String.IsNullOrWhiteSpace(word)) return null;
@@ -61,8 +89,7 @@ namespace EnglishCompanion {
             return token;
         }
         // 统一成与词典一致的形式：全小写、直引号。
-        internal static string Normalize(string word) {
-            return word.Replace('’', '\'').Replace('‘', '\'').Replace('“', '"').Replace('”', '"').ToLowerInvariant();
+        internal static string Normalize(string word) {            return word.Replace('’', '\'').Replace('‘', '\'').Replace('“', '"').Replace('”', '"').ToLowerInvariant();
         }
     }
 }
