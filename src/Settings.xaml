@@ -24,7 +24,9 @@
  </Window.Resources>
  <Border x:Name="Shell" CornerRadius="24" BorderBrush="{DynamicResource Edge}" BorderThickness="1" ClipToBounds="True">
   <Grid>
-   <Grid.RowDefinitions><RowDefinition Height="134"/><RowDefinition Height="*"/><RowDefinition Height="82"/></Grid.RowDefinitions>
+   <!-- 第 0 行留给品牌区与皮肤角色：三套皮肤的角色都占顶部约 200px，
+        卡片必须从它下方开始，否则会压在角色脸上。 -->
+   <Grid.RowDefinitions><RowDefinition Height="212"/><RowDefinition Height="*"/><RowDefinition Height="82"/></Grid.RowDefinitions>
    <!-- 皮肤插画与液面铺满整个窗口：必须跨所有行，否则会被压扁变形。 -->
    <Image x:Name="Artwork" Grid.RowSpan="3" Stretch="Fill" IsHitTestVisible="False"/>
    <!-- 液面画布必须和插画一样铺满窗口。放在行容器里会被父级的行高卡死，

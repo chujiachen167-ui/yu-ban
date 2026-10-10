@@ -138,7 +138,13 @@ namespace EnglishCompanion {
                         + " contentNeeded=" + Math.Round(need)
                         + " overflow=" + (need > w.ActualHeight ? "YES" : "no")
                         + (entry != null ? " languageEntry=" + entry.ActualHeight + "px/" + ((System.Windows.Controls.TextBlock)w.FindName("LearningLabel")).Text : ""));
-                    Shot(w, System.IO.Path.Combine(directory, "settings-" + theme + ".png"), 0);
+                    // 卡片不能压到皮肤角色：三套皮肤的角色都占顶部一段，
+                // 内容区起点必须让开，否则角色脸会被卡片盖住。
+                var firstCard = w.FindName("TranslationCard") as System.Windows.Controls.Border;
+                double top = firstCard == null ? 0 : firstCard.TranslatePoint(new Point(0, 0), w).Y;
+                Console.WriteLine("CardTop[" + theme + "]=" + Math.Round(top)
+                    + " => " + (theme == "glass" ? "(default skin has no character)" : (top < 200 ? "TOO HIGH — overlaps the character" : "clears the character")));
+                Shot(w, System.IO.Path.Combine(directory, "settings-" + theme + ".png"), 0);
                     // 上拉列表：点开入口，确认它是往上弹而不是被窗口裁掉。
                     if (theme == "glass") {
                         entry.RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
