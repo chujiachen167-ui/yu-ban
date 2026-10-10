@@ -62,6 +62,12 @@ namespace EnglishCompanion {
             if (all.TryGetValue(key, out entry)) return entry;
             return null;
         }
+        // 纯汉字串才走中文词典；中英夹杂交给英文分支处理。
+        internal static bool IsHan(string text) {
+            if (String.IsNullOrEmpty(text)) return false;
+            foreach (char ch in text) if (ch < 0x4E00 || ch > 0x9FFF) return false;
+            return true;
+        }
         // 查询要容错：浮窗取词可能带空格、连字符或弯引号，大小写也要能命中。
         internal static async Task<WordEntry> Find(string word) {
             if (String.IsNullOrWhiteSpace(word)) return null;

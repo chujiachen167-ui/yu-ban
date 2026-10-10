@@ -384,6 +384,25 @@ namespace EnglishCompanion {
             Equal(false, Companion.IsSingleWord("beauty", "Chinese"), "learning Chinese: English input is translated");
             Equal(false, Companion.IsSingleWord("", "English"), "empty input is never a lookup");
 
+            // 悬停取词：中文没有空格，必须靠词典做最长匹配，不能按空白切。
+            Equal("record", WordAt.Pick("I bought a record yesterday.", 12, false), "English word under the cursor");
+            Equal("record", WordAt.Pick("a record.", 2, false), "English word at the start of a fragment");
+            Equal("well-known", WordAt.Pick("a well-known fact", 2, false), "hyphenated word is one token");
+            Equal("don't", WordAt.Pick("I don't know", 2, false), "apostrophe word is one token");
+            Equal("", WordAt.Pick("a  b", 1, false), "a space has no word");
+            Equal("", WordAt.Pick("", 0, false), "empty text has no word");
+            // 中文：悬停在「学」应取到「学习」而不是单字「学」。
+            Equal("学习", WordAt.Pick("我正在学习中文", 4, true), "Chinese longest match picks 学习");
+            Equal("美丽", WordAt.Pick("美丽", 0, true), "a lone Chinese word picks itself");
+            Equal("电脑", WordAt.Pick("一台电脑", 2, true), "Chinese match inside a phrase");
+            // 悬停在非汉字上不该给出汉字词。
+            Equal("", WordAt.Pick("a 中文", 1, true), "no Chinese word on a latin character");
+            // 中文分支只处理汉字；中英夹杂交给英文分支，避免互相抢。
+            Equal(true, WordDictionary.IsHan("美丽"), "pure Han is Chinese");
+            Equal(false, WordDictionary.IsHan("beauty"), "latin is not Chinese");
+            Equal(false, WordDictionary.IsHan("美丽 beauty"), "mixed text is not pure Chinese");
+            Equal(false, WordDictionary.IsHan(""), "empty text is not Chinese");
+
             // 中文词典：拼音与英文释义必须来自数据。
             var meili = WordDictionary.FindChinese("美丽").GetAwaiter().GetResult();
             Equal(true, meili != null, "the Chinese dictionary resolves 美丽");

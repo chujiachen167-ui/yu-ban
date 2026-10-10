@@ -475,33 +475,33 @@ namespace EnglishCompanion {
         void HoverWord(object sender,MouseEventArgs e) {
             if(!expanded||!learnable||pinned||dragging||SelectedLength()>0||Mouse.LeftButton==MouseButtonState.Pressed||editor.ContextMenu.IsOpen) {hover.Stop();return;}
             var at = e != null ? RangeAt(e.GetPosition(editor)) : new GroupRange { Group = -1 };
-            // 查词只在译文行上触发：原文是中文，行内没有英文词。
-            string text = at.Target ? TextAt(at) : "";
-            int offset = at.Target ? OffsetIn(e, at) : 0;
-            string word = WordAt(text, offset);
-            if (word == hoverWord) return;
+            // 悬停哪一行都查：学英文时用户看的是自己输入的英文原文，只在译文行上触发会让
+            // 「悬停自己打的字」永远查不到。判据是这行文字本身，不是它是不是译文行。
+            string text = TextAt(at);
+            int offset = OffsetIn(e, at);
+            string word = WordAt.Pick(text, offset, WordDictionary.IsHan(text));
+            if(word == hoverWord) return;
             hover.Stop();hoverWord=word;hoverContext=GroupText(at.Group);
             if(word.Length==0) {if(!pinned)CloseCard();return;}
             leave.Stop();hover.Start();
+        }
+        void UpdatePin() {pin.Name(pinned?"取消固定":"固定词卡");pin.Control.Background=pinned?Skin.Brush(Skin.Get(skinId).Hover):Brushes.Transparent;}
+        // 查词卡：英文走英文词典（音标+词性+中文释义），中文走中文词典（拼音+英文释义）。
+        async Task ShowWord(string word) {
+            activeWord=word;int version=++cardVersion;wordTitle.Text=word;meaning.Text="查询中…";explanation.Text="";popup.IsOpen=true;
+            try {
+                bool chinese=WordDictionary.IsHan(word);
+                var entry = chinese ? await WordDictionary.FindChinese(word) : await WordDictionary.Find(word);
+                if(version!=cardVersion||disposed)return;
+                wordTitle.Text=word+(entry==null||entry.Phonetic.Length==0?"":"  /"+entry.Phonetic+"/");
+                meaning.Text=entry==null?"本地词典未收录":(chinese||entry.Word==word.ToLowerInvariant()?"":"原形："+entry.Word+"\n")+entry.Meaning;
+            } catch {if(version==cardVersion)meaning.Text="词典暂不可用";}
         }
         string TextAt(GroupRange record) { if(record.Start==null||record.End==null)return"";return new TextRange(record.Start,record.End).Text; }
         int OffsetIn(MouseEventArgs e,GroupRange record) {
             if(e==null||record.Start==null)return 0;
             var hit=editor.GetPositionFromPoint(e.GetPosition(editor),true);if(hit==null)return 0;
             return OffsetOf(hit.GetPositionAtOffset(0))-OffsetOf(record.Start);
-        }
-        internal static string WordAt(string text,int index) {
-            if(index<0||index>=text.Length)return "";
-            foreach(Match match in Regex.Matches(text,@"[A-Za-z]+(?:['’\-][A-Za-z]+)*")) if(index>=match.Index&&index<match.Index+match.Length)return match.Value;
-            return "";
-        }
-        void UpdatePin() {pin.Name(pinned?"取消固定":"固定词卡");pin.Control.Background=pinned?Skin.Brush(Skin.Get(skinId).Hover):Brushes.Transparent;}
-        async Task ShowWord(string word) {
-            activeWord=word;int version=++cardVersion;wordTitle.Text=word;meaning.Text="查询中…";explanation.Text="";popup.IsOpen=true;
-            try {var entry=await WordDictionary.Find(word);if(version!=cardVersion||disposed)return;
-                wordTitle.Text=word+(entry==null||entry.Phonetic.Length==0?"":"  /"+entry.Phonetic+"/");
-                meaning.Text=entry==null?"本地词典未收录":(entry.Word!=word.ToLowerInvariant()?"原形："+entry.Word+"\n":"")+entry.Meaning;
-            } catch {if(version==cardVersion)meaning.Text="词典暂不可用";}
         }
         async Task Explain() {
             if(ExplainWord==null||explainJob!=null)return;int version=cardVersion;explainJob=new CancellationTokenSource();contextButton.Enabled=false;explanation.Text="正在解释…";
