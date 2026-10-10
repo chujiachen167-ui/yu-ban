@@ -124,7 +124,10 @@ namespace EnglishCompanion {
             buttons.Children.Add(busy);buttons.Children.Add(Retry.Control);
             buttons.Children.Add(copy.Control);
             buttons.Children.Add(Manual.Control);
-            Speak.Enabled=Retry.Enabled=copy.Enabled=Lookup.Enabled=false;
+            // 查词开关是模式，不是对当前结果的操作：它必须一直可点，
+            // 否则用户没有译文时根本打不开，功能就等于不可达。
+            Speak.Enabled=Retry.Enabled=copy.Enabled=false;
+            Lookup.Enabled=true;
             close.Click+=delegate {if(previewMode)window.Close();else Hide();if(Dismissed!=null)Dismissed();};
             copy.Click+=delegate {CopyAll();};copyFeedback.Tick+=delegate {copyFeedback.Stop();copy.Glyph="\uE8C8";copy.Name("复制译文");};
             Lookup.Click+=delegate {SetLookup(!lookupMode);if(LookupToggled!=null)LookupToggled();};

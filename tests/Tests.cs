@@ -404,9 +404,19 @@ namespace EnglishCompanion {
                 Equal(true, retry < copy, "copy sits next to re-translate as originally specified");
                 // 查词开关默认关闭，状态与命名一致。
                 Equal(false, panel.LookupMode, "lookup starts off");
+                // 回归：查词是模式开关，不是对当前结果的操作。
+                // 它曾经在启动时被一并置灰，且再没有代码把它启用，导致功能完全不可达。
+                var lookupButton = typeof(Overlay).GetField("Lookup", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(panel);
+                var lookupControl = (System.Windows.Controls.Button)lookupButton.GetType().GetField("Control", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(lookupButton);
+                Equal(true, lookupControl.IsEnabled, "the lookup switch is clickable before any translation exists");
+                // 翻成不可学状态（没有译文）之后，开关仍然要能点。
+                panel.Learnable = false;
+                Equal(true, lookupControl.IsEnabled, "an empty panel still lets the user turn lookup on");
+                // 而依赖结果的按钮必须跟着不可用，两者不能混为一谈。
+                Equal(false, panel.Speak.Enabled, "read aloud still waits for a result");
+                Equal(false, panel.Retry.Enabled, "re-translate still waits for a result");
                 panel.SetLookup(true);
-                Equal(true, panel.LookupMode, "lookup can be switched on");
-                Equal("查词：已开启", System.Windows.Automation.AutomationProperties.GetName((System.Windows.Controls.Button)typeof(Overlay).GetField("Lookup", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public).GetValue(panel).GetType().GetField("Control", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(typeof(Overlay).GetField("Lookup", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public).GetValue(panel))), "an enabled lookup says so for screen readers");
+                Equal(true, panel.LookupMode, "lookup can be switched on");                Equal("查词：已开启", System.Windows.Automation.AutomationProperties.GetName((System.Windows.Controls.Button)typeof(Overlay).GetField("Lookup", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public).GetValue(panel).GetType().GetField("Control", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(typeof(Overlay).GetField("Lookup", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public).GetValue(panel))), "an enabled lookup says so for screen readers");
                 // 词典卡渲染：音标与释义都要出现在浮窗里。
                 var list = new System.Collections.Generic.List<WordEntry>();
                 list.Add(new WordEntry { Word = "record", Phonetic = "ˈrekɔːd", PartOfSpeech = "n.", Meaning = "记录；唱片" });
