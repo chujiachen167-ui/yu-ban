@@ -571,6 +571,24 @@ namespace EnglishCompanion {
             var eleven = make("ElevenLabs", "eleven_multilingual_v2");
             Equal(false, SpeechProfiles.CapabilityOf(eleven).Speed, "a provider without speed support hides the option");
         }
+        // 重复播放：默认必须是「1 次」，不能悄悄改变原有行为。
+        static void RepeatChecks() {
+            Equal(1, new Configuration().SpeechRepeat, "repeat defaults to playing once");
+            Equal(4, SpeechProfiles.RepeatNames.Length, "four repeat choices are offered");
+            Equal(4, SpeechProfiles.RepeatValues.Length, "names and values stay in step");
+            Equal(1, SpeechProfiles.RepeatValues[0], "the first choice is a single play");
+            Equal(0, SpeechProfiles.RepeatValues[3], "the last choice is loop-until-stopped");
+            // 档位与显示名一一对应，顺序不能错。
+            for (int i = 0; i < SpeechProfiles.RepeatValues.Length; i++)
+                Equal(true, SpeechProfiles.RepeatNames[i].Length > 0, "repeat choice " + i + " is labelled");
+            // 配置往返。
+            var round = Probe.Json.Deserialize<Configuration>(Probe.Json.Serialize(new Configuration { SpeechRepeat = 3 }));
+            Equal(3, round.SpeechRepeat, "repeat choice survives the config round-trip");
+            // 默认值必须与老配置兼容：老配置没有这个字段，读出来应是 1。
+            var old = Probe.Json.Deserialize<Configuration>("{\"Language\":\"English\"}");
+            Equal(1, old.SpeechRepeat, "a config written before this option still plays once");
+            Equal(0, old.SpeechSpeed, "and still reads at normal speed");
+        }
         static void LiquidChecks() {            var canvas=new System.Windows.Controls.Canvas();
             var window=new System.Windows.Window {Title="语伴 · 动效检查",Width=820,Height=590,Content=canvas,ShowInTaskbar=false};
             var material=new GlassMist(window,canvas);material.SetEnabled(true);window.Show();PumpLayout();
@@ -925,6 +943,7 @@ namespace EnglishCompanion {
                 LookupModeChecks();
                 SettingsPropagationChecks();
                 SpeedChecks();
+                RepeatChecks();
                 if(Array.IndexOf(args,"--desktop-check")>=0) using(var tray=new TrayIcon(new System.Windows.Forms.ContextMenuStrip(),delegate {},true)) {
                     Equal(true,tray.Registered,"Windows accepts tray registration");
                     Equal(true,tray.HasRectangle(),"Windows exposes tray icon rectangle");

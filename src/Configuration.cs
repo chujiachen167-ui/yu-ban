@@ -18,6 +18,9 @@ namespace EnglishCompanion {
         public string SpeechStyle = "original", EnglishVoice = "";
         // 语速：-1 慢、0 正常、1 快。默认正常，不改动平台原本的读法。
         public int SpeechSpeed = 0;
+        // 重复播放：1 只播一次（默认），2/3 重复几次，0 表示循环到手动停止。
+        // 跟读练习要反复听同一句，但默认行为不能被改变。
+        public int SpeechRepeat = 1;
         public string Theme = "glass";
         public string TranslationService = "", SpeechService = "";
         public Dictionary<string, ModelProfile> TranslationProfiles = new Dictionary<string, ModelProfile>();

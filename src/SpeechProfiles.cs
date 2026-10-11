@@ -89,6 +89,9 @@ namespace EnglishCompanion {
         // 只在下发处换算，界面统一用这三个档。
         internal static readonly string[] SpeedNames = { "慢", "正常", "快" };
         internal static readonly int[] SpeedValues = { -1, 0, 1 };
+        // 重复播放档位。默认「1 次」保持原有行为不变。
+        internal static readonly string[] RepeatNames = { "1 次", "2 次", "3 次", "循环" };
+        internal static readonly int[] RepeatValues = { 1, 2, 3, 0 };
         // 哪些平台能调速，以及怎么换算。不支持的平台不显示这一项，
         // 而不是发一个对方不认识的参数让它报错。
         internal static bool SupportsSpeed(Configuration c) {

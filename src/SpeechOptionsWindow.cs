@@ -9,7 +9,7 @@ namespace EnglishCompanion {
     internal sealed class SpeechOptionsWindow {
         readonly Window window;
         readonly Configuration config;
-        readonly ComboBox style=new ComboBox(), voice=new ComboBox(), speed=new ComboBox();
+        readonly ComboBox style=new ComboBox(), voice=new ComboBox(), speed=new ComboBox(), repeat=new ComboBox();
         readonly TextBlock status=new TextBlock();
         readonly Button listen=new Button(),apply=new Button();
         readonly AudioActivity activity=new AudioActivity {Visibility=Visibility.Collapsed,Margin=new Thickness(0,0,6,0)};
@@ -46,19 +46,24 @@ namespace EnglishCompanion {
             controls.ColumnDefinitions.Add(new ColumnDefinition {Width=new GridLength(14)});
             controls.ColumnDefinitions.Add(new ColumnDefinition());
             controls.ColumnDefinitions.Add(new ColumnDefinition {Width=new GridLength(14)});
-            controls.ColumnDefinitions.Add(new ColumnDefinition {Width=new GridLength(132)});
+            controls.ColumnDefinitions.Add(new ColumnDefinition {Width=new GridLength(112)});
+            controls.ColumnDefinitions.Add(new ColumnDefinition {Width=new GridLength(14)});
+            controls.ColumnDefinitions.Add(new ColumnDefinition {Width=new GridLength(96)});
             Grid.SetRow(controls,1);layout.Children.Add(controls);
             var styles=new StackPanel();styles.Children.Add(new TextBlock {Text="读法",Margin=new Thickness(0,0,0,6)});styles.Children.Add(style);controls.Children.Add(styles);
             var voices=new StackPanel();voices.Children.Add(new TextBlock {Text="英语音色",Margin=new Thickness(0,0,0,6)});voices.Children.Add(voice);Grid.SetColumn(voices,2);controls.Children.Add(voices);
             // 语速：跟读练习要听清重音，慢速是最直接的手段。
             var speeds=new StackPanel();speeds.Children.Add(new TextBlock {Text="语速",Margin=new Thickness(0,0,0,6)});speeds.Children.Add(speed);Grid.SetColumn(speeds,4);controls.Children.Add(speeds);
-            AutomationProperties.SetName(speed,"语速");
+            var repeats=new StackPanel();repeats.Children.Add(new TextBlock {Text="重复",Margin=new Thickness(0,0,0,6)});repeats.Children.Add(repeat);Grid.SetColumn(repeats,6);controls.Children.Add(repeats);
+            AutomationProperties.SetName(speed,"语速");AutomationProperties.SetName(repeat,"重复播放次数");
             // 高度与字号统一走 Settings.xaml 的共享样式，这里不再单独覆盖：
             // 之前写死 40，和样式里的 52 打架，文字被挤得上下不居中。
             AutomationProperties.SetName(style,"朗读方式");AutomationProperties.SetName(voice,"英语音色");
             foreach(string name in SpeechProfiles.StyleNames)style.Items.Add(name);
             foreach(string name in SpeechProfiles.SpeedNames)speed.Items.Add(name);
             speed.SelectedIndex=Math.Max(0,Array.IndexOf(SpeechProfiles.SpeedValues,config.SpeechSpeed));
+            foreach(string name in SpeechProfiles.RepeatNames)repeat.Items.Add(name);
+            repeat.SelectedIndex=Math.Max(0,Array.IndexOf(SpeechProfiles.RepeatValues,config.SpeechRepeat));
             // 音色来自当前服务商与模型的真实目录；换一家平台，选项跟着变。
             var catalog=SpeechProfiles.Catalog(config);
             foreach(var v in catalog) {
@@ -85,8 +90,9 @@ namespace EnglishCompanion {
             apply.Content="采用";apply.Width=104;apply.Height=44;apply.FontSize=15;apply.HorizontalAlignment=HorizontalAlignment.Right;apply.Background=Skin.Brush(skin.Accent);apply.Foreground=Skin.Brush(skin.ButtonInk);Grid.SetColumn(apply,1);actions.Children.Add(apply);
             style.SelectionChanged+=delegate {Stop();Refresh();};voice.SelectionChanged+=delegate {Stop();Refresh();};
             speed.SelectionChanged+=delegate {Stop();Refresh();};
+            repeat.SelectionChanged+=delegate {Stop();Refresh();};
             listen.Click+=async delegate {await Listen();};
-            apply.Click+=delegate {ReadSelection();source.SpeechStyle=config.SpeechStyle;source.EnglishVoice=config.EnglishVoice;source.SpeechSpeed=config.SpeechSpeed;window.DialogResult=true;};
+            apply.Click+=delegate {ReadSelection();source.SpeechStyle=config.SpeechStyle;source.EnglishVoice=config.EnglishVoice;source.SpeechSpeed=config.SpeechSpeed;source.SpeechRepeat=config.SpeechRepeat;window.DialogResult=true;};
             window.Closed+=delegate {closed=true;Stop();};window.Content=shell;Refresh();
         }
         void ReadSelection() {
@@ -94,6 +100,7 @@ namespace EnglishCompanion {
             var item=voice.SelectedItem as ComboBoxItem;
             config.EnglishVoice=(item!=null&&item.Tag!=null)?item.Tag as string:"";
             config.SpeechSpeed=SpeechProfiles.SpeedValues[Math.Max(0,speed.SelectedIndex)];
+            config.SpeechRepeat=SpeechProfiles.RepeatValues[Math.Max(0,repeat.SelectedIndex)];
         }
         void Refresh() {ReadSelection();bool supported=SpeechProfiles.Supported(config);listen.IsEnabled=apply.IsEnabled=supported;
             var cap=SpeechProfiles.CapabilityOf(config);

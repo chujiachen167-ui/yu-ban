@@ -268,7 +268,17 @@ namespace EnglishCompanion {
                 if (current != voiceGeneration || disposed) return;
                 overlay.SetPlayback(PlaybackState.Playing,selectedWord!=null);
                 // 系统语音的语速在播放进程里生效，云端语速已经写进请求体。
-                await voice.Play(new VoiceRequest { Local=config.LocalVoice, Text=text, Language=config.Language, Rate=config.LocalVoice?(config.SpeechSpeed<0?-2:config.SpeechSpeed>0?2:0):0, Audio=config.LocalVoice?null:Convert.ToBase64String(audio) },token);
+                var request=new VoiceRequest { Local=config.LocalVoice, Text=text, Language=config.Language, Rate=config.LocalVoice?(config.SpeechSpeed<0?-2:config.SpeechSpeed>0?2:0):0, Audio=config.LocalVoice?null:Convert.ToBase64String(audio) };
+                // 重复播放：跟读要反复听同一句。0 表示循环，直到用户再点一次停止。
+                int total=config.SpeechRepeat;
+                int played=0;
+                while(true) {
+                    if (current != voiceGeneration || disposed) return;
+                    await voice.Play(request,token);
+                    played++;
+                    if (total>0 && played>=total) break;
+                    if (total==0 && played>=99) break;   // 循环也留一个上限，避免无人值守时一直播
+                }
             } catch (OperationCanceledException) {
                 // 用户主动停止朗读：安静回到空闲，不当作错误，也不留红色提示。
                 if (current == voiceGeneration && !disposed) { StopVoice(); overlay.SetFailed("", true); }
