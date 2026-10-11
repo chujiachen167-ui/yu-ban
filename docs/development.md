@@ -24,7 +24,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1 -Test
 
 `--panel-shot <目录>` 用内置演示数据把浮窗渲染成 PNG，用于人工核对排版与皮肤；不联网、不读取个人配置。
 
-本轮基础与接口检查 488 项通过，包含浮窗、对照渲染、皮肤、萌宠和液面的 645 项通过。托盘注册在受限命令环境未通过；新增平台没有真实 Key 验证，详细范围见 providers.md。
+本轮基础与接口检查 549 项通过，包含浮窗、对照渲染、皮肤、萌宠和液面的 706 项通过。托盘注册在受限命令环境未通过；新增平台没有真实 Key 验证，详细范围见 providers.md。
 
 构建加 `-Deploy` 会把产物装到本机安装目录，并用 SHA-256 核对安装版与构建一致，不一致就直接报错。这一步不要靠人工记得做。
 
@@ -35,8 +35,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1 -Test
 - src/SettingsWindow.cs、Settings.xaml：两行设置页；ProviderHelp.cs、ProviderOptionsWindow.cs：帮助和模型调整。
 - src/TranslationPanel.cs：浮窗排版、按句对照渲染、查词、选择复制及动画。
 - src/SentencePairs.cs：句末与逗号级切句、连词保护、翻译方向判定与带稳定 ID 的句组结果。
+- src/WordAt.cs：悬停取词。英文按词形规则，中文用词典做最长匹配（中文没有空格）。
+- src/WordDictionary.cs：英文与中文两部离线词典的加载与查询。
+- src/LearningLanguages.cs：「我在学」的候选语言；只有已验证的才列给用户。
 - src/Services.cs：请求协议、返回解析、对照翻译的 ID 校验、超时、取消和长度限制。
-- src/VoiceWorker.cs：独立播放进程，避免音频驱动异常带走主程序。
+- src/VoiceWorker.cs：独立播放进程，避免音频驱动异常带走主程序；系统语音的语速也在这里生效。
 - tests/ProviderTests.cs：用假凭据和模拟 HTTP 返回检查协议，无需账户。
 - tests/PairTests.cs：句组切句、方向、单次请求、ID 校验与降级的离线检查。
 
