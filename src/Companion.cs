@@ -295,8 +295,10 @@ namespace EnglishCompanion {
             speechJob = new CancellationTokenSource(); var token = speechJob.Token; int current = ++voiceGeneration;
             string text = selectedWord??translated; overlay.SetPlayback(PlaybackState.Preparing,selectedWord!=null);
             try {
-                // 缓存要跟着语速走：改了语速必须重新合成，否则播的还是旧速度的音频。
-                string audioKey = text + "\u0000" + config.SpeechSpeed;
+                // 缓存键必须反映"会让合成结果不同的所有设置"：音色、模型、读法、语速。
+                // 只带文本和语速曾经导致换了音色还播旧录音。这里直接用请求体本身当键，
+                // 改任何一项都会自然失效，不用列举。
+                string audioKey = text + "\u0000" + Probe.Json.Serialize(Services.SpeechBody(config, text));
                 if (!config.LocalVoice && (audio == null || audioText != audioKey)) { var bytes = await Services.Speak(config, text, token); if (current != voiceGeneration) return; WaveAudio.Validate(bytes); audio = bytes; audioText = audioKey; }
                 if (current != voiceGeneration || disposed) return;
                 overlay.SetPlayback(PlaybackState.Playing,selectedWord!=null);

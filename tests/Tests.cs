@@ -604,6 +604,36 @@ namespace EnglishCompanion {
             Equal(1, old.SpeechRepeat, "a config written before this option still plays once");
             Equal(0, old.SpeechSpeed, "and still reads at normal speed");
         }
+        // 音频缓存键：任何会改变合成结果的设置都必须让旧录音失效。
+        // 这里直接按"请求体是否随设置变化"来验证，不列举字段。
+        static void SpeechCacheKeyChecks() {
+            var baseConfig = new Configuration { Language = "English" };
+            ProviderProfiles.Prepare(baseConfig, "OpenAI", true);
+            baseConfig.SpeechModel = "gpt-4o-mini-tts";
+            Func<Configuration, string> key = delegate(Configuration c) {
+                return Probe.Json.Serialize(Services.SpeechBody(c, "hello"));
+            };
+            string plain = key(baseConfig);
+            // 换音色必须变。
+            var other = Probe.Json.Deserialize<Configuration>(Probe.Json.Serialize(baseConfig));
+            other.Voice = "nova";
+            Equal(false, plain == key(other), "changing the voice invalidates the cached audio");
+            // 换模型必须变。
+            var model = Probe.Json.Deserialize<Configuration>(Probe.Json.Serialize(baseConfig));
+            model.SpeechModel = "tts-1";
+            Equal(false, plain == key(model), "changing the model invalidates the cached audio");
+            // 改语速必须变。
+            var slow = Probe.Json.Deserialize<Configuration>(Probe.Json.Serialize(baseConfig));
+            slow.SpeechSpeed = -1;
+            Equal(false, plain == key(slow), "changing the speed invalidates the cached audio");
+            // 改读法必须变（OpenAI 用 instructions 表达）。
+            var read = Probe.Json.Deserialize<Configuration>(Probe.Json.Serialize(baseConfig));
+            read.SpeechStyle = "clear";
+            Equal(false, plain == key(read), "changing the reading style invalidates the cached audio");
+            // 什么都没改就不该变，否则每次都重新合成，白花额度。
+            var same = Probe.Json.Deserialize<Configuration>(Probe.Json.Serialize(baseConfig));
+            Equal(true, plain == key(same), "an unchanged configuration reuses the cached audio");
+        }
         static void LiquidChecks() {            var canvas=new System.Windows.Controls.Canvas();
             var window=new System.Windows.Window {Title="语伴 · 动效检查",Width=820,Height=590,Content=canvas,ShowInTaskbar=false};
             var material=new GlassMist(window,canvas);material.SetEnabled(true);window.Show();PumpLayout();
@@ -959,6 +989,7 @@ namespace EnglishCompanion {
                 SettingsPropagationChecks();
                 SpeedChecks();
                 RepeatChecks();
+                SpeechCacheKeyChecks();
                 if(Array.IndexOf(args,"--desktop-check")>=0) using(var tray=new TrayIcon(new System.Windows.Forms.ContextMenuStrip(),delegate {},true)) {
                     Equal(true,tray.Registered,"Windows accepts tray registration");
                     Equal(true,tray.HasRectangle(),"Windows exposes tray icon rectangle");
