@@ -384,6 +384,15 @@ namespace EnglishCompanion {
             Equal(false, Companion.IsSingleWord("beauty", "Chinese"), "learning Chinese: English input is translated");
             Equal(false, Companion.IsSingleWord("", "English"), "empty input is never a lookup");
 
+            // 常见词形必须查得到。这些词在词典里各有自己的释义
+            // （went 给"go的过去式"、studies 注明"study的复数"），
+            // 不强制归并到原形 —— 释义本身已说明关系，归并反而丢信息。
+            foreach (var form in new[] { "went", "gone", "better", "best", "studies", "studied", "mice", "children", "feet", "ran", "running", "beauty" })
+                Equal(true, WordDictionary.Find(form).GetAwaiter().GetResult() != null, "inflected form is listed: " + form);
+            // 原形也要在，否则只读到变形的释义会缺上下文。
+            foreach (var stem in new[] { "go", "good", "study", "mouse", "child", "foot", "run", "beauty" })
+                Equal(true, WordDictionary.Find(stem).GetAwaiter().GetResult() != null, "base form is listed: " + stem);
+
             // 悬停取词：中文没有空格，必须靠词典做最长匹配，不能按空白切。
             Equal("record", WordAt.Pick("I bought a record yesterday.", 12, false), "English word under the cursor");
             Equal("record", WordAt.Pick("a record.", 2, false), "English word at the start of a fragment");
