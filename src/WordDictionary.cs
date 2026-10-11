@@ -11,6 +11,9 @@ namespace EnglishCompanion {
         // 词性（n. / v. / adj. 等）。ECDICT 的释义本身以词性开头，这里拆出来单独显示，
         // 查词模式下用户最想先看到的就是词性和读音。
         internal string PartOfSpeech;
+        // 量词（中文用）。CC-CEDICT 的 CL: 标记在生成时已转成简体写法，
+        // 如「大象」配「头」。中文学习者最容易用错的就是量词，所以单独给出。
+        internal string Classifier;
     }
     internal static class WordDictionary {
         static readonly Lazy<Task<Dictionary<string,WordEntry>>> entries=new Lazy<Task<Dictionary<string,WordEntry>>>(delegate {return Task.Run((Func<Dictionary<string,WordEntry>>)Load);});
@@ -48,7 +51,8 @@ namespace EnglishCompanion {
                     try { a = json.Deserialize<string[]>(line); } catch { continue; }
                     if (a == null || a.Length < 3 || String.IsNullOrEmpty(a[0])) continue;
                     // 中文按原样匹配，不做大小写折叠；拼音单独给一行。
-                    result[a[0]] = new WordEntry { Word = a[0], Phonetic = a[1] ?? "", Meaning = a[2] ?? "", PartOfSpeech = "" };
+                    // 第五个字段是量词，旧数据没有就留空。
+                    result[a[0]] = new WordEntry { Word = a[0], Phonetic = a[1] ?? "", Meaning = a[2] ?? "", PartOfSpeech = "", Classifier = a.Length > 4 ? (a[4] ?? "") : "" };
                 }
             }
             return result;

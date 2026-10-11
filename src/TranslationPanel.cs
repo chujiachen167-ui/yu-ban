@@ -35,6 +35,9 @@ namespace EnglishCompanion {
         internal List<GroupRange> Ranges { get { return ranges; } }
         readonly TextBlock status;
         readonly OverlayButton fold,close,copy,pin,wordAudio,contextButton,cardClose;
+        readonly OverlayButton usageButton;
+        // 要例句的回调：由上层决定用哪个模型、怎么问。不点就不调用。
+        internal Func<string,CancellationToken,Task<string>> UsageRequest;
         readonly Grid busy = new Grid();
         BusyIndicator busyDot;
         readonly System.Windows.Shapes.Path pinShape;
@@ -43,6 +46,8 @@ namespace EnglishCompanion {
         // 查词开关：打开后输入英文直接给音标与词性，不再走翻译。
         internal readonly OverlayButton Lookup;
         internal event Action LookupToggled;
+        // 用户选中一段文字后点查词：把选中的内容交给上层去查。
+        internal Action<string> LookupSelection;
         internal event Action Dismissed;
         internal Action<string> SpeakWord;
         internal Func<string,string,CancellationToken,Task<string>> ExplainWord;
@@ -130,7 +135,14 @@ namespace EnglishCompanion {
             Lookup.Enabled=true;
             close.Click+=delegate {if(previewMode)window.Close();else Hide();if(Dismissed!=null)Dismissed();};
             copy.Click+=delegate {CopyAll();};copyFeedback.Tick+=delegate {copyFeedback.Stop();copy.Glyph="\uE8C8";copy.Name("复制译文");};
-            Lookup.Click+=delegate {SetLookup(!lookupMode);if(LookupToggled!=null)LookupToggled();};
+            // 查词按钮两种用法，按有没有选区决定：
+            // 选中了文字 → 查这段选中的内容；没选中 → 切换查词模式。
+            // 中文词边界不明确，让用户自己选比程序猜更准，所以选中优先。
+            Lookup.Click+=delegate {
+                string picked=SelectedText();
+                if(picked.Length>0) { if(LookupSelection!=null)LookupSelection(picked); return; }
+                SetLookup(!lookupMode);if(LookupToggled!=null)LookupToggled();
+            };
             var menu=new ContextMenu();var selectionCopy=new MenuItem {Header="复制",Command=ApplicationCommands.Copy,CommandTarget=editor};
             menu.Items.Add(selectionCopy);menu.Items.Add(new MenuItem {Header="全选",Command=ApplicationCommands.SelectAll,CommandTarget=editor});editor.ContextMenu=menu;
             menu.Opened+=delegate {hover.Stop();CloseCard();};
@@ -149,8 +161,14 @@ namespace EnglishCompanion {
             var actions=new StackPanel {Orientation=Orientation.Horizontal,Margin=new Thickness(0,10,0,0)};stack.Children.Add(actions);
             wordAudio=new OverlayButton("发音","\uE767");contextButton=new OverlayButton("结合本句解释","\uE8F2");
             contextButton.Control.ToolTip="使用翻译模型解释当前句子中的含义";
-            actions.Children.Add(wordAudio.Control);actions.Children.Add(contextButton.Control);
-            wordAudio.Click+=delegate {if(SpeakWord!=null)SpeakWord(activeWord);};contextButton.Click+=async delegate {await Explain();};
+            // 例句按钮：只在用户点了以后才联网，不默认花钱、不默认等。
+            // 中文学习者需要知道这个词日常怎么用，而不是只有一条词典释义。
+            usageButton=new OverlayButton("例句","\uE8FD");
+            usageButton.Control.ToolTip="向模型要一个日常例句（点击后才调用）";
+            actions.Children.Add(wordAudio.Control);actions.Children.Add(usageButton.Control);actions.Children.Add(contextButton.Control);
+            wordAudio.Click+=delegate {if(SpeakWord!=null)SpeakWord(activeWord);};
+            usageButton.Click+=async delegate {await ExplainUsage();};
+            contextButton.Click+=async delegate {await Explain();};
             explanation=new TextBlock {FontSize=12,TextWrapping=TextWrapping.Wrap,Foreground=Skin.Brush("#526782")};
             stack.Children.Add(new ScrollViewer {Content=explanation,MaxHeight=125,VerticalScrollBarVisibility=ScrollBarVisibility.Auto});
             card.MouseEnter+=delegate {leave.Stop();};card.MouseLeave+=delegate {if(!pinned)leave.Start();};
@@ -309,6 +327,8 @@ namespace EnglishCompanion {
             return d;
         }
         internal int SelectedLength() { return editor.Selection.IsEmpty ? 0 : Math.Abs(editor.Selection.End.GetOffsetToPosition(editor.Selection.Start)); }
+        // 当前选中的文字。中文词没有空格，用户选中的范围就是他要查的那个词。
+        internal string SelectedText() { return editor.Selection.IsEmpty ? "" : editor.Selection.Text.Trim(); }
         // 按文档偏移选择，供检查与键盘操作使用。
         internal void SelectRange(int start,int length) {
             var from=document.ContentStart.GetPositionAtOffset(start);
@@ -393,6 +413,15 @@ namespace EnglishCompanion {
                         line.Inlines.Add(new Run(e.PartOfSpeech+"  ") {FontSize=13,FontFamily=new FontFamily("Segoe UI")});
                     line.Inlines.Add(new Run(e.Meaning??"") {FontSize=14,FontFamily=new FontFamily("Microsoft YaHei UI")});
                     document.Blocks.Add(line);Record(line,i,true);
+                    // 量词单独一行：中文学习者最容易用错的就是量词，
+                    // 但词典的原始标记（CL:頭|头[tou2]）不能原样显示。
+                    if(!String.IsNullOrEmpty(e.Classifier)) {
+                        var measure=new Paragraph {Margin=new Thickness(0,0,0,i==entries.Count-1?0:8)};
+                        measure.Inlines.Add(new Run("量词：") {FontSize=13,FontFamily=new FontFamily("Microsoft YaHei UI")});
+                        measure.Inlines.Add(new Run(e.Classifier) {FontSize=14,FontFamily=new FontFamily("Microsoft YaHei UI"),FontWeight=FontWeights.SemiBold});
+                        measure.Inlines.Add(new Run("　一"+e.Classifier+word) {FontSize=13,FontFamily=new FontFamily("Microsoft YaHei UI")});
+                        document.Blocks.Add(measure);Record(measure,i,true);
+                    }
                 }
             }
             Translation.Text = word;
@@ -509,7 +538,20 @@ namespace EnglishCompanion {
             catch(OperationCanceledException){}catch(Exception e){if(version==cardVersion)explanation.Text=e is InvalidOperationException?e.Message:"解释暂不可用，请重试";}
             finally {if(version==cardVersion){explainJob.Dispose();explainJob=null;contextButton.Enabled=true;}}
         }
-        void CloseCard() {hover.Stop();leave.Stop();hoverWord="";hoverContext="";pinned=false;cardVersion++;popup.IsOpen=false;UpdatePin();if(explainJob!=null){explainJob.Cancel();explainJob.Dispose();explainJob=null;}contextButton.Enabled=true;}
+        // 例句：复用与解释同一套取消机制，两个按钮不会同时发起请求。
+        async Task ExplainUsage() {
+            if(UsageRequest==null||explainJob!=null)return;
+            int version=cardVersion;explainJob=new CancellationTokenSource();
+            usageButton.Enabled=false;contextButton.Enabled=false;explanation.Text="正在取例句…";
+            try {
+                var result=await UsageRequest(activeWord,explainJob.Token);
+                if(version==cardVersion)explanation.Text=result;
+            }
+            catch(OperationCanceledException){}
+            catch(Exception e){if(version==cardVersion)explanation.Text=e is InvalidOperationException?e.Message:"例句暂不可用，请重试";}
+            finally {if(version==cardVersion){explainJob.Dispose();explainJob=null;usageButton.Enabled=true;contextButton.Enabled=true;}}
+        }
+        void CloseCard() {hover.Stop();leave.Stop();hoverWord="";hoverContext="";pinned=false;cardVersion++;popup.IsOpen=false;UpdatePin();if(explainJob!=null){explainJob.Cancel();explainJob.Dispose();explainJob=null;}contextButton.Enabled=true;usageButton.Enabled=true;}
         internal void ApplySkin(string id) {
             var s=Skin.Get(id);skinId=s.Id;shell.Background=Skin.Brush(s.Surface);shell.BorderBrush=Skin.Brush(s.Edge);
             outline.BorderBrush=Skin.Brush(s.Id=="glass"?"#A6BBD7":s.Id=="ocean"?"#82B6E8":"#D8BD57");

@@ -63,6 +63,11 @@ namespace EnglishCompanion {
                 }
             };
             overlay.ExplainWord = delegate(string word,string sentence,CancellationToken token) { return demo?Task.FromResult("离线演示未调用模型。正式模式下会解释本句中的含义与搭配。"):Services.Explain(config,word,sentence,token); };
+            // 例句：只在用户点「例句」时才调用，不默认查每个词。
+            overlay.UsageRequest = delegate(string word,CancellationToken token) { return demo?Task.FromResult("离线演示未调用模型。正式模式下会给一个日常例句。"):Services.Usage(config,word,token); };
+            // 选中文字后点「查词」：查这段选中的内容，而不是切换模式。
+            // 中文词边界不明确，用户选中的范围就是他要查的那个词。
+            overlay.LookupSelection += delegate(string picked) { var task = LookupPicked(picked); };
             var menu = new ContextMenuStrip();
             menu.Items.Add("设置", null, delegate { OpenSettings(); });
             menu.Items.Add("粘贴一句话翻译", null, delegate { Manual(); });
@@ -176,6 +181,34 @@ namespace EnglishCompanion {
         internal static bool ChineseWordExists(string text) {
             if (!IsSingleChineseWord(text)) return false;
             return WordDictionary.FindChinese(text.Trim()).GetAwaiter().GetResult() != null;
+        }
+        // 用户主动选中后查词。与悬停取词的区别：范围由用户给定，
+        // 所以可以是词组（如「一头大象」里的「大象」），也可能查不到。
+        // 查不到时如实说，并留一个「例句」入口让他问模型，而不是编一个释义。
+        async Task LookupPicked(string picked) {
+            hasContent = true;
+            generation++; int current = generation;
+            source = picked.Trim();
+            overlay.Original.Text = "";
+            overlay.SetTranslatingState();
+            try {
+                string term = source;
+                bool chinese = WordDictionary.IsHan(term);
+                var entry = chinese ? await WordDictionary.FindChinese(term) : await WordDictionary.Find(term);
+                // 词组在词典里没有就直接查，再退一步试前两个字，覆盖「大象」这类双字词。
+                if (entry == null && chinese && term.Length > 2) entry = await WordDictionary.FindChinese(term.Substring(0, 2));
+                if (current != generation || disposed) return;
+                var list = new System.Collections.Generic.List<WordEntry>();
+                if (entry != null) list.Add(entry);
+                overlay.SetTranslating(false);
+                overlay.ShowWordEntries(term, list);
+                overlay.Learnable = entry != null;
+                translated = entry == null ? term : term;
+                overlay.Speak.Enabled = !demo;
+                audio = null; audioText = "";
+            } catch (Exception) {
+                if (current == generation && !disposed) overlay.SetFailed("词典暂不可用，请重试", false);
+            }
         }
         // 查词：只读本地词典，安静返回，不弹错误、不联网。
         async Task LookupWord(string text) {

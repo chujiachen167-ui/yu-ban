@@ -321,6 +321,16 @@ namespace EnglishCompanion {
                 panel.ShowWordEntries("zzzznotawordzzzz", new System.Collections.Generic.List<WordEntry>());
                 Pump(500);
                 if (lw != null) Shot(lw, System.IO.Path.Combine(directory, "lookup-miss.png"), 0);
+                // 带量词的词：量词单独一行，不能是词典的原始 CL: 标记。
+                var dz = WordDictionary.FindChinese("大象").GetAwaiter().GetResult();
+                if (dz != null) {
+                    var dzList = new System.Collections.Generic.List<WordEntry>();
+                    dzList.Add(dz);
+                    panel.ShowWordEntries("大象", dzList);
+                    panel.SetLookup(true);
+                    Pump(500);
+                    if (lw != null) Shot(lw, System.IO.Path.Combine(directory, "lookup-classifier.png"), 0);
+                }
                 // 学中文时的查词：拼音在上，英文释义在下。
                 var zh = WordDictionary.FindChinese("美丽").GetAwaiter().GetResult();
                 if (zh != null) {

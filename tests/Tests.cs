@@ -412,6 +412,21 @@ namespace EnglishCompanion {
             Equal(false, WordDictionary.IsHan("美丽 beauty"), "mixed text is not pure Chinese");
             Equal(false, WordDictionary.IsHan(""), "empty text is not Chinese");
 
+            // 量词：词典的 CL: 标记必须转成简体写法，不能原样显示给用户。
+            // 用户报过界面上出现「CL:頭|头[tou2]」这种内部标记。
+            var daxiang = WordDictionary.FindChinese("大象").GetAwaiter().GetResult();
+            Equal(true, daxiang != null, "大象 resolves");
+            Equal("头", daxiang.Classifier, "the classifier is extracted as the simplified form");
+            Equal(false, daxiang.Meaning.Contains("CL:"), "the raw CL marker never reaches the meaning text");
+            Equal(false, daxiang.Meaning.Contains("|"), "the traditional/simplified separator is not shown");
+            Equal(false, daxiang.Meaning.Contains("[tou2]"), "numbered pinyin is not shown here");
+            Equal("elephant", daxiang.Meaning, "the gloss itself is left clean");
+            var diannao = WordDictionary.FindChinese("电脑").GetAwaiter().GetResult();
+            Equal("台", diannao.Classifier, "电脑 takes 台 as its classifier");
+            // 没有量词标记的词，这一栏留空，不编造。
+            Equal("", WordDictionary.FindChinese("美丽").GetAwaiter().GetResult().Classifier, "a word with no classifier leaves it empty");
+            Equal("", WordDictionary.FindChinese("你好").GetAwaiter().GetResult().Classifier, "another word with no classifier");
+
             // 中文词典：拼音与英文释义必须来自数据。
             var meili = WordDictionary.FindChinese("美丽").GetAwaiter().GetResult();
             Equal(true, meili != null, "the Chinese dictionary resolves 美丽");

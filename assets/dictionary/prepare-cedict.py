@@ -52,10 +52,29 @@ def pinyin(raw):
 
 
 def defs(raw):
-    """把 /a/b/c/ 拆成一句中文可读的英文释义。"""
-    items = [d.strip() for d in raw.strip('/').split('/') if d.strip()]
-    # CL: 是量词标注，对初学者也有用，保留；其余按顺序拼接。
-    return '；'.join(items)
+    """把 /a/b/c/ 拆成读者看得懂的内容。
+
+    返回 (释义, 量词)。CC-CEDICT 用 CL:頭|头[tou2] 这样的原始标记表示量词，
+    直接显示给学习者只是把词典的内部格式原样搬过去，没人看得懂。
+    量词对中文学习者恰恰是最容易用错、也最需要提示的一点，所以不丢弃，
+    而是转写成「头」并单独给出，由界面按自己的排版展示。
+    """
+    items = []
+    classifier = ''
+    for piece in raw.strip('/').split('/'):
+        piece = piece.strip()
+        if not piece:
+            continue
+        if piece.startswith('CL:'):
+            # 取简体形式（斜杠后的那个），不要繁体和数字声调。
+            word = piece[3:].split('[')[0].strip()
+            if '|' in word:
+                word = word.split('|')[-1]
+            if word and not classifier:
+                classifier = word
+            continue
+        items.append(piece)
+    return '；'.join(items), classifier
 
 
 rows = {}
@@ -68,15 +87,16 @@ with gzip.open(sys.argv[1], 'rt', encoding='utf-8') as f:
         if not m:
             continue
         trad, simp, py, meaning = m.groups()
-        text = defs(meaning)
+        text, classifier = defs(meaning)
         if not text or len(simp) > 12 or len(text) > 400:
             continue
+        # 第五个字段是量词，没有就留空；界面按需展示，不硬塞进释义里。
         # 同一简体词可能有多个词条，保留第一条，避免覆盖掉最常用的释义。
         if simp not in rows:
-            rows[simp] = [simp, pinyin(py), text, '']
+            rows[simp] = [simp, pinyin(py), text, '', classifier]
         # 繁体写法指向简体条目，方便繁体输入也能查到。
         if trad != simp and trad not in rows:
-            rows[trad] = [trad, pinyin(py), text, '']
+            rows[trad] = [trad, pinyin(py), text, '', classifier]
 
 with gzip.open(sys.argv[2], 'wt', encoding='utf-8', compresslevel=9) as f:
     for word in sorted(rows):
