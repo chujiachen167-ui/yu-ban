@@ -63,13 +63,13 @@ Key 用 Windows 当前用户加密，保存在本机 `%LOCALAPPDATA%\EnglishComp
 
 欢迎提交 Issue 或 Pull Request。反馈问题时，写清 Windows 版本、软件/输入法名称、怎么复现、你期待的结果；**不要上传 API Key 或个人配置文件**。
 
-欢迎大家做出更多好玩儿的皮肤！
+欢迎大家做出更多好玩儿的皮肤！加皮肤、加平台、改词典或改朗读偏好的具体做法，见 [参与开发](CONTRIBUTING.md)。
 
 <img width="601" height="428" alt="屏幕截图 2026-10-06 112813" src="https://github.com/user-attachments/assets/d8823843-5dcf-454c-a3e4-6dc4a5351abe" />
 <img width="604" height="425" alt="屏幕截图 2026-10-06 112754" src="https://github.com/user-attachments/assets/b5b9c35e-88e1-44d7-8784-edf359e1a724" />
 
 ↑目前的两款内置皮肤
-开发方式、检查方法和更新记录见 [开发说明](docs/development.md) 与 [changelog](changelog/)。更新日志只保存在文档里，设置窗口没有日志入口。
+开发方式、检查方法和更新记录见 [开发说明](docs/development.md) 与 [changelog](changelog/)。动手改代码前请看 [参与开发](CONTRIBUTING.md)。更新日志只保存在文档里，设置窗口没有日志入口。
 
 ## 来源与许可
 

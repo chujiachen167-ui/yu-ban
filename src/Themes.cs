@@ -7,7 +7,11 @@ using System.Runtime.InteropServices;
 namespace EnglishCompanion {
     internal sealed class Skin {
         internal string Id, Name, Accent, Ink, Muted, Surface, Edge, Panel;
-        internal string ButtonInk { get { return Id=="baby"?"#453B25":"#FFFFFF"; } }
+        // 玻璃皮肤的判定集中在这里，不要在各处写 Id=="glass"。
+        internal bool IsGlass { get { return Id == "glass"; } }
+        // 浅色按钮文字：小奶蛙底色亮，用深色墨；其余用白。
+        internal bool LightButtons { get { return Id == "baby"; } }
+        internal string ButtonInk { get { return LightButtons?"#453B25":"#FFFFFF"; } }
         internal string Field { get { return Id=="baby"?"#FFFEF8":Id=="glass"?"#00FFFFFF":"#FBFDFF"; } }
         internal Brush SettingsPanel { get { return Id=="glass"?Brushes.Transparent:Brush(Panel); } }
         internal string FieldEdge { get { return Id=="baby"?"#9D8C59":Id=="glass"?"#294566":"#748CA8"; } }
@@ -20,7 +24,12 @@ namespace EnglishCompanion {
             if (id == "baby") return new Skin { Id=id, Name="小奶蛙", Accent="#FFDC52", Ink="#453B25", Muted="#6F644B", Surface="#FFF9DF", Edge="#E9D58A", Panel="#FFFEF5" };
             return new Skin { Id="glass", Name="官方默认", Accent="#245ECB", Ink="#172B4D", Muted="#152C45", Surface="#F5F9FF", Edge="#C3D5EB", Panel="#F8FBFF" };
         }
+        // 皮肤清单只在这里维护：设置页的下拉、默认值校验都读它，
+        // 这样加一套皮肤不用再去改设置页里写死的下标。
+        internal static readonly string[] Ids = { "glass", "ocean", "baby" };
+        internal static bool Known(string id) { return Array.IndexOf(Ids, id) >= 0; }
         internal static Brush Brush(string hex) { var b = (SolidColorBrush)new BrushConverter().ConvertFromString(hex); b.Freeze(); return b; }
+        // 皮肤插画：资源名约定为 EnglishCompanion.<id>.png，没有插画就返回 null。
         internal static ImageSource Artwork(string id) {
             if (id == "glass") return null;
             using (var stream = System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream("EnglishCompanion." + id + ".png")) {

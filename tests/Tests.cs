@@ -634,6 +634,38 @@ namespace EnglishCompanion {
             var same = Probe.Json.Deserialize<Configuration>(Probe.Json.Serialize(baseConfig));
             Equal(true, plain == key(same), "an unchanged configuration reuses the cached audio");
         }
+        // 皮肤清单：加一套皮肤只应改 Skin.Ids 一处，设置页跟着走。
+        static void SkinRegistryChecks() {
+            Equal(3, Skin.Ids.Length, "three skins ship today");
+            Equal("glass", Skin.Ids[0], "the default skin is first so an unknown id can fall back to it");
+            foreach (var id in Skin.Ids) {
+                Equal(true, Skin.Known(id), "the registry knows " + id);
+                Equal(id, Skin.Get(id).Id, "Skin.Get round-trips " + id);
+                Equal(true, Skin.Get(id).Name.Length > 0, "skin " + id + " has a display name");
+            }
+            Equal(false, Skin.Known("nope"), "an unknown skin id is not accepted");
+            Equal("glass", Skin.Get("nope").Id, "an unknown id falls back to the default rather than crashing");
+            // 大小写不应造成第二套皮肤：Id 是精确匹配的契约。
+            Equal(false, Skin.Known("Glass"), "skin ids are matched exactly");
+
+            // 设置页的下拉必须与清单一一对应，不能多也不能少。
+            using (var settings = new SettingsWindow(new Configuration { Theme = "ocean" }, true)) {
+                var window = typeof(SettingsWindow).GetField("window", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(settings) as System.Windows.Window;
+                window.Show(); PumpLayout(300);
+                var picker = (System.Windows.Controls.ComboBox)typeof(SettingsWindow).GetField("skins", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(settings);
+                Equal(Skin.Ids.Length, picker.Items.Count, "the picker lists exactly the registered skins");
+                Equal("大肥鱼", picker.SelectedItem, "a saved skin is selected on open");
+                // 逐项切换都要落到对应的 Id，而不是按位置算错。
+                for (int i = 0; i < Skin.Ids.Length; i++) {
+                    picker.SelectedIndex = i;
+                    var draft = typeof(SettingsWindow).GetField("draft", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(settings) as Configuration;
+                    Equal(Skin.Ids[i], draft.Theme, "picking item " + i + " stores " + Skin.Ids[i]);
+                }
+                window.Close();
+            }
+            // 打乱顺序也不该串：第一项必须是 glass。
+            Equal("glass", Skin.Ids[Array.IndexOf(Skin.Ids, "glass")], "glass resolves to itself in the registry");
+        }
         static void LiquidChecks() {            var canvas=new System.Windows.Controls.Canvas();
             var window=new System.Windows.Window {Title="语伴 · 动效检查",Width=820,Height=590,Content=canvas,ShowInTaskbar=false};
             var material=new GlassMist(window,canvas);material.SetEnabled(true);window.Show();PumpLayout();
@@ -990,6 +1022,7 @@ namespace EnglishCompanion {
                 SpeedChecks();
                 RepeatChecks();
                 SpeechCacheKeyChecks();
+                SkinRegistryChecks();
                 if(Array.IndexOf(args,"--desktop-check")>=0) using(var tray=new TrayIcon(new System.Windows.Forms.ContextMenuStrip(),delegate {},true)) {
                     Equal(true,tray.Registered,"Windows accepts tray registration");
                     Equal(true,tray.HasRectangle(),"Windows exposes tray icon rectangle");

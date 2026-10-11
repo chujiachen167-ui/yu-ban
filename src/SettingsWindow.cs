@@ -53,8 +53,10 @@ namespace EnglishCompanion {
             translation.SelectionChanged+=delegate { draft.TranslationKeys[currentTranslation]=Configuration.Seal(translationKey.Value); currentTranslation=(string)translation.SelectedItem; translationKey.Value=ProviderProfiles.Saved(draft.TranslationKeys,currentTranslation); translationKey.HideSecret(); Refresh(); };
             speech.SelectionChanged+=delegate { if(currentSpeech!="系统语音") draft.SpeechKeys[currentSpeech]=Configuration.Seal(speechKey.Value); currentSpeech=(string)speech.SelectedItem; speechKey.Value=ProviderProfiles.Saved(draft.SpeechKeys,currentSpeech); speechKey.HideSecret(); Refresh(); };
             translationKey.Changed+=Refresh; speechKey.Changed+=Refresh;
-            skins.Items.Add("官方默认"); skins.Items.Add("大肥鱼"); skins.Items.Add("小奶蛙"); skins.SelectedItem=Skin.Get(draft.Theme).Name;
-            skins.SelectionChanged+=delegate { draft.Theme=skins.SelectedIndex==1?"ocean":skins.SelectedIndex==2?"baby":"glass"; ApplySkin(); };
+            // 皮肤清单从 Skin.Ids 生成，加皮肤只改那一处，不用再动这里的下标。
+            foreach (string skinId in Skin.Ids) skins.Items.Add(Skin.Get(skinId).Name);
+            skins.SelectedIndex = Math.Max(0, Array.IndexOf(Skin.Ids, Skin.Known(draft.Theme) ? draft.Theme : Skin.Ids[0]));
+            skins.SelectionChanged+=delegate { draft.Theme=Skin.Ids[Math.Max(0,skins.SelectedIndex)]; ApplySkin(); };
             Find<Button>("Confirm").Click+=delegate { Save(); }; Find<Button>("Close").Click+=delegate { window.Close(); }; Find<Button>("Minimize").Click+=delegate { window.WindowState=WindowState.Minimized; };
             Find<RadioButton>("Bilingual").IsChecked=draft.ShowOriginal;
             Find<RadioButton>("TranslationOnly").IsChecked=!draft.ShowOriginal;
