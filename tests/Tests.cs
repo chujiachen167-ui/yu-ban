@@ -237,9 +237,9 @@ namespace EnglishCompanion {
             Equal(true, natural.Contains("instruction"), "natural reading sends an instruction");
             Equal(true, clear.Contains("instruction"), "clear reading sends an instruction");
             Equal(false, natural == clear, "the two reading styles are genuinely different requests");
-            // 清晰伴读会把语速放慢到 0.92；自然会话保持 1.0。
+            // 清晰伴读会把语速放慢到 0.92；自然会话不写 rate，保持平台默认。
             Equal(true, clear.Contains("\"rate\":0.92"), "clear reading slows down slightly");
-            Equal(true, natural.Contains("\"rate\":1"), "natural reading keeps the default rate");
+            Equal(false, natural.Contains("\"rate\""), "natural reading sends no rate, so the platform default stands");
 
             // 音色选择必须进入请求，朗读才真的换了人。
             var c1 = Probe.Json.Deserialize<Configuration>(Probe.Json.Serialize(v31)); c1.EnglishVoice = "Emily_v3.1";
@@ -530,6 +530,46 @@ namespace EnglishCompanion {
             var round = Probe.Json.Deserialize<Configuration>(Probe.Json.Serialize(new Configuration { Language = "Chinese", LookupMode = true }));
             Equal("Chinese", round.Language, "the learning language round-trips through the config file");
             Equal(true, round.LookupMode, "the lookup switch round-trips through the config file");
+        }
+        // 语速：能调的才给出来，各家参数名与范围不同，只在发送处换算。
+        static void SpeedChecks() {
+            Func<string, string, Configuration> make = delegate(string provider, string model) {
+                var c = new Configuration { Language = "English" };
+                ProviderProfiles.Prepare(c, provider, true); c.SpeechModel = model;
+                return c;
+            };
+            // 正常档不下发任何参数，保持平台默认行为。
+            var openai = make("OpenAI", "gpt-4o-mini-tts");
+            Equal(true, SpeechProfiles.SupportsSpeed(openai), "OpenAI supports speed");
+            Equal<double?>(null, SpeechProfiles.SpeedFor(openai), "normal speed sends nothing");
+            openai.SpeechSpeed = -1;
+            Equal(0.8, SpeechProfiles.SpeedFor(openai).Value, "slow speed maps to OpenAI's speed field");
+            openai.SpeechSpeed = 1;
+            Equal(1.25, SpeechProfiles.SpeedFor(openai).Value, "fast speed maps for OpenAI");
+            Equal(true, Probe.Json.Serialize(Services.SpeechBody(openai, "hi")).Contains("\"speed\":1.25"), "OpenAI speed reaches the request");
+            // MiniMax 用 voice_setting.speed，默认 1。
+            var minimax = make("MiniMax", "speech-2.8-hd");
+            Equal(true, SpeechProfiles.SupportsSpeed(minimax), "MiniMax supports speed");
+            Equal(true, Probe.Json.Serialize(Services.SpeechBody(minimax, "hi")).Contains("\"speed\":1"), "MiniMax keeps its default speed when unchanged");
+            minimax.SpeechSpeed = -1;
+            Equal(true, Probe.Json.Serialize(Services.SpeechBody(minimax, "hi")).Contains("\"speed\":0.8"), "MiniMax slow speed reaches the request");
+            // 千问只有 Audio 3.1 接受 rate；其它千问模型不给这个选项。
+            var audio = make("千问", "qwen-audio-3.1-tts-flash");
+            Equal(true, SpeechProfiles.SupportsSpeed(audio), "Qwen Audio 3.1 supports rate");
+            var flash = make("千问", "qwen3-tts-flash");
+            Equal(false, SpeechProfiles.SupportsSpeed(flash), "plain Qwen TTS has no rate, so no option is offered");
+            Equal<double?>(null, SpeechProfiles.SpeedFor(flash), "no speed is sent to a model that cannot take it");
+            // 语速与读法叠加，不能互相覆盖。
+            audio.SpeechStyle = "clear"; audio.SpeechSpeed = -1;
+            string both = Probe.Json.Serialize(Services.SpeechBody(audio, "hi"));
+            Equal(true, both.Contains("\"rate\":0.782"), "style and speed combine instead of overwriting each other");
+            // 系统语音走 -10..10 的整数，在播放进程里生效。
+            var local = new Configuration { LocalVoice = true, SpeechSpeed = -1 };
+            Equal(true, SpeechProfiles.SupportsSpeed(local), "system voice supports its own rate");
+            Equal(true, SpeechProfiles.CapabilityOf(local).Speed, "the capability flag matches");
+            // 不支持调速的平台，界面上就不该出现这一项。
+            var eleven = make("ElevenLabs", "eleven_multilingual_v2");
+            Equal(false, SpeechProfiles.CapabilityOf(eleven).Speed, "a provider without speed support hides the option");
         }
         static void LiquidChecks() {            var canvas=new System.Windows.Controls.Canvas();
             var window=new System.Windows.Window {Title="语伴 · 动效检查",Width=820,Height=590,Content=canvas,ShowInTaskbar=false};
@@ -884,6 +924,7 @@ namespace EnglishCompanion {
                 LearningLanguageChecks();
                 LookupModeChecks();
                 SettingsPropagationChecks();
+                SpeedChecks();
                 if(Array.IndexOf(args,"--desktop-check")>=0) using(var tray=new TrayIcon(new System.Windows.Forms.ContextMenuStrip(),delegate {},true)) {
                     Equal(true,tray.Registered,"Windows accepts tray registration");
                     Equal(true,tray.HasRectangle(),"Windows exposes tray icon rectangle");

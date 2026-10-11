@@ -81,17 +81,27 @@ namespace EnglishCompanion {
                 if(provider=="OpenAI") {
                     string guide=SpeechProfiles.Guide(c);
                     if(guide.Length>0)body["instructions"]=guide;
+                    var speed=SpeechProfiles.SpeedFor(c);
+                    if(speed.HasValue)body["speed"]=speed.Value;   // 官方范围 0.25–4.0
                 }
                 return body;
             }
             if(provider=="ElevenLabs")return new {text=text,model_id=c.SpeechModel};
-            if(provider=="MiniMax")return new {model=c.SpeechModel,text=text,stream=false,voice_setting=new {voice_id=c.Voice,speed=1,vol=1,pitch=0},audio_setting=new {sample_rate=24000,format="wav",channel=1},output_format="hex",language_boost=c.Language};
+            if(provider=="MiniMax") {
+                var speed=SpeechProfiles.SpeedFor(c);
+                return new {model=c.SpeechModel,text=text,stream=false,voice_setting=new {voice_id=c.Voice,speed=speed.HasValue?speed.Value:1.0,vol=1,pitch=0},audio_setting=new {sample_rate=24000,format="wav",channel=1},output_format="hex",language_boost=c.Language};
+            }
             if (c.SpeechModel.StartsWith("qwen-audio-", StringComparison.OrdinalIgnoreCase)) {
                 if (c.SpeechModel.EndsWith("-next", StringComparison.OrdinalIgnoreCase))
                     return new { model = c.SpeechModel, input = new { text_prompt = "A speaker clearly says: " + text, format = "wav", sample_rate = 48000, channels = 2 } };
                 var input=new Dictionary<string,object> {{"text",text},{"voice",SpeechProfiles.Voice(c)},{"format","wav"},{"sample_rate",24000}};
                 string instruction=SpeechProfiles.Instruction(c);
-                if(instruction.Length>0) {input["instruction"]=instruction;input["language_hints"]=new[]{"en"};input["rate"]=c.SpeechStyle=="clear"?.92:1.0;}
+                // 语速与读法都能影响 rate，两者相乘，避免互相覆盖。
+                double rate=1.0;
+                if(instruction.Length>0) {input["instruction"]=instruction;input["language_hints"]=new[]{"en"};rate=c.SpeechStyle=="clear"?.92:1.0;}
+                var chosen=SpeechProfiles.SpeedFor(c);
+                if(chosen.HasValue)rate*=chosen.Value;
+                if(rate!=1.0)input["rate"]=Math.Round(rate,3);
                 return new {model=c.SpeechModel,input=input};
             }
             return new { model = c.SpeechModel, input = new { text = text, voice = c.Voice, language_type = c.Language } };

@@ -82,11 +82,38 @@ namespace EnglishCompanion {
         // 朗读偏好只在真正支持的平台上开放，不把一家能力说成所有家都支持。
         // 当前这台平台与模型到底支持什么。不支持的部分要说清楚原因，而不是让人调了没反应。
         internal sealed class Capability {
-            internal bool Styles, Voices, ChildVoices, BritishVoices;
+            internal bool Styles, Voices, ChildVoices, BritishVoices, Speed;
             internal string Reason = "";
+        }
+        // 语速选项：显示名 → 内部值。三家平台的参数名和范围各不相同，
+        // 只在下发处换算，界面统一用这三个档。
+        internal static readonly string[] SpeedNames = { "慢", "正常", "快" };
+        internal static readonly int[] SpeedValues = { -1, 0, 1 };
+        // 哪些平台能调速，以及怎么换算。不支持的平台不显示这一项，
+        // 而不是发一个对方不认识的参数让它报错。
+        internal static bool SupportsSpeed(Configuration c) {
+            if (c.LocalVoice) return true;   // 系统语音用 Rate 调整，本地生效
+            string provider = ProviderProfiles.SpeechProvider(c);
+            if (c.Language == "Chinese") return provider == "MiniMax" || provider == "OpenAI" || c.LocalVoice;
+            if (provider == "OpenAI") return true;                                 // speed: 0.25–4.0
+            if (provider == "MiniMax") return true;                                // voice_setting.speed: 0.5–2
+            if (provider == "千问") return c.SpeechModel == "qwen-audio-3.1-tts-flash";  // rate
+            return false;
+        }
+        // 把三档换算成平台要的值。返回 null 表示这家不吃这个参数。
+        internal static double? SpeedFor(Configuration c) {
+            if (c.SpeechSpeed == 0) return null;   // 正常档不下发，保持平台默认
+            string provider = ProviderProfiles.SpeechProvider(c);
+            bool slow = c.SpeechSpeed < 0;
+            if (c.LocalVoice) return slow ? -2 : 2;         // 系统语音用 -10..10 的整数
+            if (provider == "OpenAI") return slow ? 0.8 : 1.25;
+            if (provider == "MiniMax") return slow ? 0.8 : 1.25;   // 范围 0.5–2，留出余量
+            if (provider == "千问" && c.SpeechModel == "qwen-audio-3.1-tts-flash") return slow ? 0.85 : 1.15;
+            return null;
         }
         internal static Capability CapabilityOf(Configuration c) {
             var cap = new Capability();
+            cap.Speed = SupportsSpeed(c);
             string provider = ProviderProfiles.SpeechProvider(c);
             if (c.LocalVoice) { cap.Reason = "系统语音由 Windows 提供，没有可选音色与读法"; return cap; }
             if (c.Language != "English" && c.Language != "Chinese") { cap.Reason = "当前只对英语与中文朗读提供设置"; return cap; }

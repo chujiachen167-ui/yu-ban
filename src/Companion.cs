@@ -262,10 +262,13 @@ namespace EnglishCompanion {
             speechJob = new CancellationTokenSource(); var token = speechJob.Token; int current = ++voiceGeneration;
             string text = selectedWord??translated; overlay.SetPlayback(PlaybackState.Preparing,selectedWord!=null);
             try {
-                if (!config.LocalVoice && (audio == null || audioText != text)) { var bytes = await Services.Speak(config, text, token); if (current != voiceGeneration) return; WaveAudio.Validate(bytes); audio = bytes; audioText = text; }
+                // 缓存要跟着语速走：改了语速必须重新合成，否则播的还是旧速度的音频。
+                string audioKey = text + "\u0000" + config.SpeechSpeed;
+                if (!config.LocalVoice && (audio == null || audioText != audioKey)) { var bytes = await Services.Speak(config, text, token); if (current != voiceGeneration) return; WaveAudio.Validate(bytes); audio = bytes; audioText = audioKey; }
                 if (current != voiceGeneration || disposed) return;
                 overlay.SetPlayback(PlaybackState.Playing,selectedWord!=null);
-                await voice.Play(new VoiceRequest { Local=config.LocalVoice, Text=text, Language=config.Language, Audio=config.LocalVoice?null:Convert.ToBase64String(audio) },token);
+                // 系统语音的语速在播放进程里生效，云端语速已经写进请求体。
+                await voice.Play(new VoiceRequest { Local=config.LocalVoice, Text=text, Language=config.Language, Rate=config.LocalVoice?(config.SpeechSpeed<0?-2:config.SpeechSpeed>0?2:0):0, Audio=config.LocalVoice?null:Convert.ToBase64String(audio) },token);
             } catch (OperationCanceledException) {
                 // 用户主动停止朗读：安静回到空闲，不当作错误，也不留红色提示。
                 if (current == voiceGeneration && !disposed) { StopVoice(); overlay.SetFailed("", true); }

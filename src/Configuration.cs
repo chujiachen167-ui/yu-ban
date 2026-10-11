@@ -16,6 +16,8 @@ namespace EnglishCompanion {
         // 默认目标语言。输入语言与它相同时自动取反，所以这个默认值不锁死翻译方向。
         public const string DefaultLanguage = "English";
         public string SpeechStyle = "original", EnglishVoice = "";
+        // 语速：-1 慢、0 正常、1 快。默认正常，不改动平台原本的读法。
+        public int SpeechSpeed = 0;
         public string Theme = "glass";
         public string TranslationService = "", SpeechService = "";
         public Dictionary<string, ModelProfile> TranslationProfiles = new Dictionary<string, ModelProfile>();

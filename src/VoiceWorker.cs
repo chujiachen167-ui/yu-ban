@@ -7,7 +7,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 namespace EnglishCompanion {
-    internal sealed class VoiceRequest { public string Audio, Text, Language; public bool Local; public bool FailForTest {get;set;} }
+    internal sealed class VoiceRequest { public string Audio, Text, Language; public bool Local; public int Rate; public bool FailForTest {get;set;} }
     internal static class WaveAudio {
         internal static byte[] Normalize(byte[] data) {
             // Audio 3.1 returns this streaming PCM header even in a completed HTTP file.
@@ -48,7 +48,10 @@ namespace EnglishCompanion {
                         string code=request.Language=="Japanese"?"ja":request.Language=="Korean"?"ko":request.Language=="Spanish"?"es":"en";
                         string name=null; foreach(var v in voice.GetInstalledVoices()) if(v.Enabled && v.VoiceInfo.Culture.TwoLetterISOLanguageName==code) { name=v.VoiceInfo.Name; break; }
                         if(name==null) { Console.WriteLine("NO_VOICE"); return 3; }
-                        voice.SelectVoice(name); voice.Speak(request.Text);
+                        voice.SelectVoice(name);
+                        // 系统语音用 -10..10 的整数调速；0 表示不改，保持系统默认。
+                        if(request.Rate!=0)voice.Rate=Math.Max(-10,Math.Min(10,request.Rate));
+                        voice.Speak(request.Text);
                     }
                 } else {
                     byte[] bytes=Convert.FromBase64String(request.Audio); WaveAudio.Validate(bytes);
